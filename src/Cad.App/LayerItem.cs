@@ -9,6 +9,8 @@ public sealed class LayerItem(Layer layer, Action onChanged) : INotifyPropertyCh
 {
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    public Layer Layer => layer;
+
     public string Name => layer.Name;
 
     public IBrush ColorBrush { get; } = new SolidColorBrush(Color.FromRgb(layer.Color.R, layer.Color.G, layer.Color.B));

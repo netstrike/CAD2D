@@ -26,6 +26,22 @@ public static class SceneBuilder
         return new Scene([.. builder.Batches.Values], builder.Texts, builder.Points, builder.EntityCount);
     }
 
+    /// <summary>
+    /// Scena per un gruppo di entità sciolte (anteprime dei comandi, evidenziazione della selezione).
+    /// Con <paramref name="color"/> tutte le entità prendono quel colore.
+    /// </summary>
+    public static Scene BuildEntities(IEnumerable<Entity> entities, CadColor? color = null)
+    {
+        var builder = new Builder { ColorOverride = color, IgnoreVisibility = true };
+        var root = new Context(Matrix2D.Identity, null, CadColor.White, 0);
+        foreach (var entity in entities)
+        {
+            builder.Add(entity, root);
+        }
+
+        return new Scene([.. builder.Batches.Values], builder.Texts, builder.Points, builder.EntityCount);
+    }
+
     /// <summary>Stato ereditato da un inserimento di blocco verso le entità che contiene.</summary>
     private readonly record struct Context(Matrix2D Transform, Layer? InsertLayer, CadColor InsertColor, int Depth);
 
@@ -35,6 +51,8 @@ public static class SceneBuilder
         public List<RenderText> Texts { get; } = [];
         public List<RenderPoint> Points { get; } = [];
         public int EntityCount { get; private set; }
+        public CadColor? ColorOverride { get; init; }
+        public bool IgnoreVisibility { get; init; }
 
         public void Add(Entity entity, Context context)
         {
@@ -42,12 +60,12 @@ public static class SceneBuilder
             var layer = context.InsertLayer is not null && entity.Layer.Name == Layer.DefaultName
                 ? context.InsertLayer
                 : entity.Layer;
-            if (!layer.IsVisible)
+            if (!layer.IsVisible && !IgnoreVisibility)
             {
                 return;
             }
 
-            var color = entity.Color.Source switch
+            var color = ColorOverride ?? entity.Color.Source switch
             {
                 ColorSource.Explicit => entity.Color.Value,
                 ColorSource.ByBlock => context.InsertColor,
