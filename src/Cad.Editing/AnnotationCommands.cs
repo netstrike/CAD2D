@@ -319,6 +319,7 @@ public static class AnnotationCommands
         {
             CircleEntity c => (c.Center, c.Radius),
             ArcEntity a => (a.Center, a.Radius),
+            PolylineEntity polyline => PolylineArc(polyline, picked.Point),
             _ => null,
         };
 
@@ -326,7 +327,7 @@ public static class AnnotationCommands
         {
             if (picked.Entity is not null)
             {
-                ed.Write("Serve un arco o un cerchio.");
+                ed.Write("Serve un arco, un cerchio o un tratto curvo di polilinea.");
             }
 
             return;
@@ -424,6 +425,29 @@ public static class AnnotationCommands
             ed.Document.Edit("QUOTA", e => e.Add(dimension));
             ed.Write($"Misura: {dimension.Text}");
         }
+    }
+
+    /// <summary>Arco di una polilinea (per esempio un raccordo) vicino al punto cliccato.</summary>
+    private static (Vector2 Center, double Radius)? PolylineArc(PolylineEntity polyline, Vector2 pick)
+    {
+        (Vector2, double)? best = null;
+        var bestDistance = double.PositiveInfinity;
+        for (var i = 0; i < polyline.SegmentCount; i++)
+        {
+            var (segment, arc) = polyline.GetSegment(i);
+            var distance = arc is { } a
+                ? a.ContainsAngle((pick - a.Center).Angle)
+                    ? Math.Abs(Vector2.Distance(a.Center, pick) - a.Radius)
+                    : Math.Min(Vector2.Distance(a.StartPoint, pick), Vector2.Distance(a.EndPoint, pick))
+                : segment.DistanceTo(pick);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = arc is { } found ? (found.Center, found.Radius) : null;
+            }
+        }
+
+        return best;
     }
 
     /// <summary>Tratto rettilineo cliccato: una linea o un lato diritto di una polilinea.</summary>

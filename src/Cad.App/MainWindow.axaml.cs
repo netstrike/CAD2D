@@ -21,7 +21,6 @@ public partial class MainWindow : Window
     private readonly List<string> _history = [];
     private Editor? _editor;
     private bool _closeConfirmed;
-    private bool _updatingLayers;
 
     public MainWindow()
     {
@@ -51,14 +50,7 @@ public partial class MainWindow : Window
                 _editor.OrthoEnabled = OrthoToggle.IsChecked == true;
             }
         };
-        LayerList.SelectionChanged += (_, _) =>
-        {
-            if (!_updatingLayers && _editor is not null && LayerList.SelectedItem is LayerItem item)
-            {
-                _editor.CurrentLayer = item.Layer;
-                StatusText.Text = $"Layer corrente: {item.Name}";
-            }
-        };
+        InitializeLayerControls();
 
         AddHandler(DragDrop.DropEvent, OnDrop);
         BuildSnapMenu();
@@ -164,30 +156,18 @@ public partial class MainWindow : Window
         _editor = editor;
 
         Canvas.Editor = editor;
-        RefreshLayers();
+        editor.Selection.Changed += (_, _) => RefreshProperties();
+        RefreshLayers(force: true);
         UpdateTitle();
         PromptText.Text = editor.Prompt;
     }
 
-    private void RefreshLayers()
+    private void OnDocumentChanged(object? sender, EventArgs e)
     {
-        if (_editor is null)
-        {
-            return;
-        }
-
-        var document = _editor.Document;
-        var items = document.Layers
-            .OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Select(l => new LayerItem(l, document.RaiseChanged))
-            .ToList();
-        _updatingLayers = true;
-        LayerList.ItemsSource = items;
-        LayerList.SelectedItem = items.FirstOrDefault(i => i.Layer == _editor.CurrentLayer);
-        _updatingLayers = false;
+        UpdateTitle();
+        // Dopo il giro corrente: il cambio può arrivare da una casella della lista stessa.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => RefreshLayers());
     }
-
-    private void OnDocumentChanged(object? sender, EventArgs e) => UpdateTitle();
 
     private void UpdateTitle()
     {

@@ -131,6 +131,7 @@ public static class DxfImporter
                 target.IsOn = layer.IsOn;
                 target.IsFrozen = layer.Flags.HasFlag(Acad.Tables.LayerFlags.Frozen);
                 target.IsLocked = layer.Flags.HasFlag(Acad.Tables.LayerFlags.Locked);
+                target.FileName = layer.Name;
             }
         }
 

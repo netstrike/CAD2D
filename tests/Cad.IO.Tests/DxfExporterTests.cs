@@ -295,4 +295,53 @@ public sealed class DxfDraftingRoundTripTests : IDisposable
         Assert.All(dimensions, d => Assert.NotNull(d.Graphics));
         Assert.Equal("Riga uno\nRiga due", Assert.Single(reloaded.Document.ModelSpace.OfType<TextEntity>()).Value);
     }
+
+    [Fact]
+    public void New_block_and_its_inserts_survive_save_and_reload()
+    {
+        var document = new CadDocument();
+        var layer = document.GetOrAddLayer("FORI");
+        var block = document.GetOrAddBlock("VITE");
+        block.Entities.Add(new CircleEntity(layer, Vector2.Zero, 3));
+        block.Entities.Add(new LineEntity(layer, new Vector2(-5, 0), new Vector2(5, 0)));
+        document.Edit("test", e =>
+        {
+            e.Add(new InsertEntity(layer, block) { Transform = InsertEntity.BuildTransform(Vector2.Zero, new Vector2(10, 10), 1, 1, 0) });
+            e.Add(new InsertEntity(layer, block) { Transform = InsertEntity.BuildTransform(Vector2.Zero, new Vector2(50, 10), 2, 2, Math.PI / 2) });
+        });
+
+        var path = Path.Combine(_folder, "blocchi.dxf");
+        DxfExporter.Save(document, path);
+        var reloaded = DxfImporter.Load(path);
+
+        Assert.Empty(reloaded.Errors);
+        var inserts = reloaded.Document.ModelSpace.OfType<InsertEntity>().ToList();
+        Assert.Equal(2, inserts.Count);
+        Assert.All(inserts, i => Assert.Equal("VITE", i.Block.Name));
+        Assert.Equal(2, inserts[0].Block.Entities.Count);
+        var big = inserts.Single(i => i.Position.IsAlmostEqual(new Vector2(50, 10)));
+        Assert.True(big.Transform.Transform(new Vector2(5, 0)).IsAlmostEqual(new Vector2(50, 20), 1e-9));
+    }
+
+    [Fact]
+    public void Renamed_layer_is_renamed_in_the_file_also_for_untouched_entities()
+    {
+        var path = Path.Combine(_folder, "rinomina.dxf");
+        var source = new Acad.CadDocument();
+        var acadLayer = new Acad.Tables.Layer("VECCHIO");
+        source.Layers.Add(acadLayer);
+        source.Entities.Add(new Acad.Entities.Line { StartPoint = new CSMath.XYZ(0, 0, 0), EndPoint = new CSMath.XYZ(10, 0, 0), Layer = acadLayer });
+        using (var writer = new Acad.IO.DxfWriter(path, source, false))
+        {
+            writer.Write();
+        }
+
+        var document = DxfImporter.Load(path).Document;
+        Assert.True(document.RenameLayer(document.FindLayer("VECCHIO")!, "NUOVO"));
+        DxfExporter.Save(document, path);
+
+        var reloaded = DxfImporter.Load(path).Document;
+        Assert.Null(reloaded.FindLayer("VECCHIO"));
+        Assert.Equal("NUOVO", Assert.Single(reloaded.ModelSpace.OfType<LineEntity>()).Layer.Name);
+    }
 }

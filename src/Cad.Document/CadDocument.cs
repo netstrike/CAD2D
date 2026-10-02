@@ -134,6 +134,24 @@ public sealed class CadDocument
         !Blocks.Any(b => b.Entities.Any(e => e.Layer == layer)) &&
         _layers.Remove(layer.Name);
 
+    /// <summary>Caratteri non ammessi nei nomi di layer e blocchi (come in DWG/DXF).</summary>
+    public static bool IsValidName(string name) =>
+        name.Length > 0 && name.Trim() == name && name.IndexOfAny(['<', '>', '/', '\\', '"', ':', ';', '?', '*', '|', ',', '=', '`']) < 0;
+
+    /// <summary>Rinomina un layer; falso se il nome non è valido, è già usato o si tratta del layer 0.</summary>
+    public bool RenameLayer(Layer layer, string newName)
+    {
+        if (layer.Name == Layer.DefaultName || !IsValidName(newName) ||
+            (_layers.TryGetValue(newName, out var other) && other != layer) || !_layers.Remove(layer.Name))
+        {
+            return false;
+        }
+
+        layer.Name = newName;
+        _layers.Add(newName, layer);
+        return true;
+    }
+
     public BlockDefinition GetOrAddBlock(string name)
     {
         if (!_blocks.TryGetValue(name, out var block))

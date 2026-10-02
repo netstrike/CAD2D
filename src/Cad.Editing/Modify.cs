@@ -502,32 +502,17 @@ public static class Modify
         {
             case InsertEntity insert:
             {
-                var result = new List<Entity>();
-                foreach (var child in insert.Block.Entities)
-                {
-                    var exploded = child.Transformed(insert.Transform);
-                    if (child.Layer.Name == Layer.DefaultName)
-                    {
-                        exploded.Layer = insert.Layer;
-                    }
-
-                    if (child.Color.Source == ColorSource.ByBlock)
-                    {
-                        exploded.Color = insert.Color;
-                    }
-
-                    if (ReferenceEquals(child.Linetype, Linetype.ByBlock))
-                    {
-                        exploded.Linetype = insert.Linetype;
-                    }
-
-                    result.Add(exploded);
-                }
-
+                var result = insert.Block.Entities.Select(child => Inherit(child.Transformed(insert.Transform), child, insert)).ToList();
                 // Gli attributi diventano testi semplici: non devono derivare dall'ATTRIB originale, che vive solo dentro un inserimento.
                 result.AddRange(insert.Attributes.Select(a => a is TextEntity text ? CopyText(text) : a.Transformed(Matrix2D.Identity)));
                 return result;
             }
+
+            case DimensionEntity dimension:
+                // Grafica letta dal file se c'è, altrimenti quella generata: linee, frecce e testo.
+                return dimension.Graphics is { } graphics
+                    ? [.. graphics.Entities.Select(child => Inherit(child.Transformed(dimension.GraphicsTransform), child, dimension))]
+                    : [.. dimension.Explode().Select(part => Inherit(part, part, dimension))];
 
             case PolylineEntity polyline when Curve.From(polyline) is { } curve:
                 return [.. curve.Pieces.Select(p => Curve.ToEntity([p], new LineEntity(polyline.Layer, p.Start, p.End))!.CopyStyleFrom<Entity>(polyline))];
@@ -535,6 +520,27 @@ public static class Modify
             default:
                 return null;
         }
+    }
+
+    /// <summary>Le parti su layer 0 o DaBlocco prendono layer, colore e tipo di linea del contenitore.</summary>
+    private static Entity Inherit(Entity exploded, Entity child, Entity container)
+    {
+        if (child.Layer.Name == Layer.DefaultName)
+        {
+            exploded.Layer = container.Layer;
+        }
+
+        if (child.Color.Source == ColorSource.ByBlock)
+        {
+            exploded.Color = container.Color;
+        }
+
+        if (ReferenceEquals(child.Linetype, Linetype.ByBlock))
+        {
+            exploded.Linetype = container.Linetype;
+        }
+
+        return exploded;
     }
 
     private static TextEntity CopyText(TextEntity text) => new TextEntity(text.Layer, text.Position, text.Height, text.Value)

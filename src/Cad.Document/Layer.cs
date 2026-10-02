@@ -4,7 +4,10 @@ public sealed class Layer(string name)
 {
     public const string DefaultName = "0";
 
-    public string Name { get; } = name;
+    public string Name { get; internal set; } = name;
+
+    /// <summary>Nome del layer nel file letto o salvato: se il layer viene rinominato, al salvataggio si rinomina quello.</summary>
+    public string? FileName { get; set; }
     public CadColor Color { get; set; } = CadColor.White;
     public bool IsOn { get; set; } = true;
     public bool IsFrozen { get; set; }

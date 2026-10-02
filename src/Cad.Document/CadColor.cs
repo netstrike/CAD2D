@@ -40,6 +40,32 @@ public static class StandardColors
         ("Grigio chiaro", new CadColor(192, 192, 192)),
     ];
 
+    /// <summary>Colore scritto dall'utente: nome italiano, indice 1-9 oppure "r,g,b".</summary>
+    public static CadColor? Parse(string text)
+    {
+        var compact = text.Replace(" ", "", StringComparison.Ordinal);
+        foreach (var (name, color) in All)
+        {
+            if (string.Equals(name.Replace(" ", "", StringComparison.Ordinal), compact, StringComparison.OrdinalIgnoreCase))
+            {
+                return color;
+            }
+        }
+
+        if (int.TryParse(compact, out var index) && index >= 1 && index <= All.Count)
+        {
+            return All[index - 1].Color;
+        }
+
+        var parts = compact.Split(',', ';');
+        if (parts.Length == 3 && parts.All(p => byte.TryParse(p, out _)))
+        {
+            return new CadColor(byte.Parse(parts[0]), byte.Parse(parts[1]), byte.Parse(parts[2]));
+        }
+
+        return null;
+    }
+
     public static string Describe(EntityColor color) => color.Source switch
     {
         ColorSource.ByLayer => "DaLayer",

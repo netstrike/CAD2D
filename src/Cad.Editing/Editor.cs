@@ -559,6 +559,10 @@ public sealed class EditorSettings
     public double ChamferDistance1 { get; set; }
     public double ChamferDistance2 { get; set; }
     public double TextHeight { get; set; } = 2.5;
+
+    /// <summary>Ultimo blocco inserito, proposto da INSERISCI.</summary>
+    public string? LastBlock { get; set; }
+
     public string HatchPattern { get; set; } = "ANSI31";
     public double HatchScale { get; set; } = 1;
 

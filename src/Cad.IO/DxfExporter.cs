@@ -100,7 +100,14 @@ public static class DxfExporter
         var result = new Dictionary<string, Acad.Tables.Layer>(StringComparer.OrdinalIgnoreCase);
         foreach (var layer in document.Layers)
         {
-            if (!target.Layers.TryGetValue(layer.Name, out var acadLayer))
+            if (!target.Layers.TryGetValue(layer.Name, out var acadLayer) &&
+                layer.FileName is { } fileName && document.FindLayer(fileName) is null && target.Layers.TryGetValue(fileName, out acadLayer))
+            {
+                // Rinominato nel programma: si rinomina nel file, così anche le entità lasciate intatte lo seguono.
+                acadLayer.Name = layer.Name;
+            }
+
+            if (acadLayer is null)
             {
                 acadLayer = new Acad.Tables.Layer(layer.Name) { Color = ToAcadColor(layer.Color) };
                 target.Layers.Add(acadLayer);
@@ -121,6 +128,7 @@ public static class DxfExporter
             acadLayer.IsOn = layer.IsOn;
             acadLayer.Flags = SetFlag(SetFlag(acadLayer.Flags, Acad.Tables.LayerFlags.Frozen, layer.IsFrozen), Acad.Tables.LayerFlags.Locked, layer.IsLocked);
             result[layer.Name] = acadLayer;
+            layer.FileName = layer.Name;
         }
 
         // Layer cancellati nel programma e ormai vuoti nel file.

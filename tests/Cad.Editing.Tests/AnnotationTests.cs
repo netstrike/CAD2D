@@ -113,6 +113,21 @@ public class AnnotationTests
     }
 
     [Fact]
+    public void Explode_command_turns_a_dimension_into_plain_entities()
+    {
+        Type("DLI", "0,0", "100,0", "50,20");
+        var dimension = Assert.Single(_document.ModelSpace.OfType<DimensionEntity>());
+        _editor.Selection.Add([dimension]);
+        Type("COL", "Rosso");
+        _editor.Selection.Add(_document.ModelSpace.OfType<DimensionEntity>().ToList());
+        Type("X");
+
+        Assert.Empty(_document.ModelSpace.OfType<DimensionEntity>());
+        Assert.Equal("100", Assert.Single(_document.ModelSpace.OfType<TextEntity>()).Value);
+        Assert.All(_document.ModelSpace, e => Assert.Equal(EntityColor.Explicit(new CadColor(255, 0, 0)), e.Color));
+    }
+
+    [Fact]
     public void Dimension_follows_moved_geometry_grips()
     {
         Type("DLI", "0,0", "100,0", "50,20");

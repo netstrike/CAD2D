@@ -22,6 +22,8 @@ internal static class BuiltInCommands
         ModifyCommands.Register(editor);
         DraftingCommands.Register(editor);
         AnnotationCommands.Register(editor);
+        BlockCommands.Register(editor);
+        LayerCommands.Register(editor);
     }
 
     private static async Task Line(Editor ed)
