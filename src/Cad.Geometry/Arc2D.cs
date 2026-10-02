@@ -74,4 +74,42 @@ public readonly record struct Arc2D(Vector2 Center, double Radius, double StartA
             ? new Arc2D(center, radius, startAngle, endAngle)
             : new Arc2D(center, radius, endAngle, startAngle);
     }
+
+    /// <summary>
+    /// Arco che parte da <paramref name="start"/>, passa per <paramref name="through"/> e termina in <paramref name="end"/>.
+    /// Restituisce null se i tre punti sono allineati.
+    /// </summary>
+    public static Arc2D? FromThreePoints(Vector2 start, Vector2 through, Vector2 end)
+    {
+        var center = CircumCenter(start, through, end);
+        if (center is not { } c)
+        {
+            return null;
+        }
+
+        var radius = Vector2.Distance(c, start);
+        var startAngle = (start - c).Angle;
+        var endAngle = (end - c).Angle;
+        // Se il punto intermedio sta a sinistra della corda start→end, l'arco gira in senso orario.
+        var counterClockwise = Vector2.Cross(end - start, through - start) < 0;
+        return counterClockwise
+            ? new Arc2D(c, radius, startAngle, endAngle)
+            : new Arc2D(c, radius, endAngle, startAngle);
+    }
+
+    /// <summary>Centro della circonferenza per tre punti, null se allineati.</summary>
+    public static Vector2? CircumCenter(Vector2 a, Vector2 b, Vector2 c)
+    {
+        var ab = b - a;
+        var ac = c - a;
+        var d = 2 * Vector2.Cross(ab, ac);
+        if (Tolerance.IsZero(d, 1e-12 * Math.Max(1, ab.LengthSquared + ac.LengthSquared)))
+        {
+            return null;
+        }
+
+        var x = (ac.Y * ab.LengthSquared - ab.Y * ac.LengthSquared) / d;
+        var y = (ab.X * ac.LengthSquared - ac.X * ab.LengthSquared) / d;
+        return a + new Vector2(x, y);
+    }
 }
