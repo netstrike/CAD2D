@@ -60,6 +60,7 @@ public static class DxfImporter
     {
         var dxfSource = new DxfSource(source);
         var converter = new Converter(new CadDocument { Source = dxfSource });
+        converter.ConvertLinetypes(source);
         converter.ConvertLayers(source);
         foreach (var entity in source.Entities)
         {
@@ -79,11 +80,53 @@ public static class DxfImporter
 
         public CadDocument Document { get; } = document;
 
+        public void ConvertLinetypes(Acad.CadDocument source)
+        {
+            if (source.Header.LineTypeScale > 0)
+            {
+                Document.LinetypeScale = source.Header.LineTypeScale;
+            }
+
+            foreach (var linetype in source.LineTypes)
+            {
+                if (IsSpecialLinetype(linetype.Name))
+                {
+                    continue;
+                }
+
+                // Forme e testi dei tipi di linea complessi si riducono al loro ingombro lungo la linea.
+                var pattern = linetype.Segments.Select(segment => segment.Length).ToList();
+                Document.AddLinetype(new Linetype(linetype.Name, linetype.Description ?? string.Empty, pattern));
+            }
+        }
+
+        private static bool IsSpecialLinetype(string name) =>
+            name.Equals("ByLayer", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("ByBlock", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals(Linetype.ContinuousName, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Null = DaLayer.</summary>
+        private Linetype? ToLinetype(Acad.Tables.LineType? linetype)
+        {
+            if (linetype is null || linetype.Name.Equals("ByLayer", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (linetype.Name.Equals("ByBlock", StringComparison.OrdinalIgnoreCase))
+            {
+                return Linetype.ByBlock;
+            }
+
+            return Document.FindLinetype(linetype.Name) ?? Linetype.Continuous;
+        }
+
         public void ConvertLayers(Acad.CadDocument source)
         {
             foreach (var layer in source.Layers)
             {
                 var target = Document.GetOrAddLayer(layer.Name);
+                target.Linetype = ToLinetype(layer.LineType) is { } lt && !ReferenceEquals(lt, Linetype.ByBlock) ? lt : Linetype.Continuous;
                 target.Color = ToRgb(layer.Color) ?? CadColor.White;
                 target.IsOn = layer.IsOn;
                 target.IsFrozen = layer.Flags.HasFlag(Acad.Tables.LayerFlags.Frozen);
@@ -106,6 +149,8 @@ public static class DxfImporter
             }
 
             converted.Color = ToEntityColor(source.Color);
+            converted.Linetype = ToLinetype(source.LineType);
+            converted.LinetypeScale = source.LineTypeScale > 0 ? source.LineTypeScale : 1;
             target.Add(converted);
             return converted;
         }
@@ -182,9 +227,71 @@ public static class DxfImporter
                     return definition is null ? null : new InsertEntity(layer, definition);
                 }
 
+                case AcadEntities.Solid solid:
+                {
+                    var ocs = Ocs.From(solid.Normal);
+                    // Ordine DXF "a Z": 1, 2, 4, 3 percorre il contorno. Con 3 = 4 è un triangolo.
+                    var corners = new List<Vector2> { ocs.Point(solid.FirstCorner), ocs.Point(solid.SecondCorner), ocs.Point(solid.FourthCorner) };
+                    if (!ocs.Point(solid.ThirdCorner).IsAlmostEqual(corners[2]))
+                    {
+                        corners.Add(ocs.Point(solid.ThirdCorner));
+                    }
+
+                    return new SolidEntity(layer, corners);
+                }
+
+                case AcadEntities.Hatch hatch:
+                    return ConvertHatch(hatch, layer);
+
                 default:
                     return null;
             }
+        }
+
+        private static HatchEntity? ConvertHatch(AcadEntities.Hatch hatch, Layer layer)
+        {
+            var ocs = Ocs.From(hatch.Normal);
+            var loops = new List<IReadOnlyList<PolylineVertex>>();
+            foreach (var path in hatch.Paths)
+            {
+                if (path.Edges.Count == 1 && path.Edges[0] is AcadEntities.Hatch.BoundaryPath.Polyline polyline)
+                {
+                    loops.Add([.. polyline.Vertices.Select(v => new PolylineVertex(ocs.Point(v.X, v.Y), ocs.Bulge(v.Z)))]);
+                    continue;
+                }
+
+                // Contorni fatti di linee, archi, ellissi e spline: approssimati con una spezzata.
+                try
+                {
+                    var points = path.GetPoints(SplinePrecision).Select(p => new PolylineVertex(ocs.Point(p.X, p.Y))).ToList();
+                    if (points.Count >= 3)
+                    {
+                        loops.Add(points);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Un contorno che ACadSharp non sa approssimare si salta; l'originale resta nel file.
+                }
+            }
+
+            if (loops.Count == 0)
+            {
+                return null;
+            }
+
+            var lines = hatch.IsSolid
+                ? []
+                : hatch.Pattern.Lines.Select(l => new HatchPatternLine(
+                    ocs.Angle(l.Angle),
+                    ocs.Point(l.BasePoint.X, l.BasePoint.Y),
+                    ocs.Point(l.Offset.X, l.Offset.Y),
+                    [.. l.DashLengths]));
+            return new HatchEntity(layer, loops, hatch.IsSolid ? HatchPatterns.Solid : hatch.Pattern.Name ?? "", hatch.IsSolid, lines)
+            {
+                PatternScale = hatch.PatternScale > 0 ? hatch.PatternScale : 1,
+                PatternAngle = hatch.PatternAngle,
+            };
         }
 
         private InsertEntity? ConvertInsert(AcadEntities.Insert insert, Layer layer, int depth)

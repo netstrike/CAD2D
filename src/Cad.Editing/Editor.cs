@@ -35,6 +35,43 @@ public sealed class Editor
     public EntityLocator Locator { get; }
     public Layer CurrentLayer { get; set; }
 
+    /// <summary>Colore delle entità nuove (DaLayer se non scelto).</summary>
+    public EntityColor CurrentColor { get; set; } = EntityColor.ByLayer;
+
+    /// <summary>Tipo di linea delle entità nuove; null = DaLayer.</summary>
+    public Linetype? CurrentLinetype { get; set; }
+
+    /// <summary>
+    /// Cambia proprietà (layer, colore, tipo di linea) delle entità date in un'unica operazione annullabile.
+    /// Le entità modificate restano selezionate.
+    /// </summary>
+    public void ChangeProperties(IReadOnlyList<Entity> entities, Action<Entity> change)
+    {
+        var copies = new List<Entity>(entities.Count);
+        Document.Edit("PROPRIETÀ", e =>
+        {
+            foreach (var entity in entities)
+            {
+                // Una copia "trasformata" con l'identità resta legata all'originale letto dal file, che il salvataggio conserva.
+                var copy = entity.Transformed(Matrix2D.Identity);
+                change(copy);
+                e.Replace(entity, copy);
+                copies.Add(copy);
+            }
+        });
+        Selection.Clear();
+        Selection.Add(copies);
+    }
+
+    /// <summary>Applica layer, colore e tipo di linea correnti a un'entità appena disegnata.</summary>
+    public T Styled<T>(T entity) where T : Entity
+    {
+        entity.Layer = CurrentLayer;
+        entity.Color = CurrentColor;
+        entity.Linetype = CurrentLinetype;
+        return entity;
+    }
+
     /// <summary>Valori ricordati tra un comando e l'altro (distanza di offset, raggio di raccordo...).</summary>
     public EditorSettings Settings { get; } = new();
 
@@ -512,4 +549,9 @@ public sealed class EditorSettings
     public double FilletRadius { get; set; }
     public double ChamferDistance1 { get; set; }
     public double ChamferDistance2 { get; set; }
+    public string HatchPattern { get; set; } = "ANSI31";
+    public double HatchScale { get; set; } = 1;
+
+    /// <summary>Angolo del tratteggio in gradi.</summary>
+    public double HatchAngle { get; set; }
 }

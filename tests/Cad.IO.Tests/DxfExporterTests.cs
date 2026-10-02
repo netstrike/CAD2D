@@ -204,3 +204,58 @@ public sealed class DxfExporterTests : IDisposable
         Assert.True(m.Transform(new Vector2(1.5, -2)).IsAlmostEqual(new Vector2(p.X, p.Y), 1e-9));
     }
 }
+
+public sealed class DxfDraftingRoundTripTests : IDisposable
+{
+    private readonly string _folder = Directory.CreateTempSubdirectory("cad2d-test").FullName;
+
+    public void Dispose() => Directory.Delete(_folder, recursive: true);
+
+    [Fact]
+    public void Linetypes_hatches_and_solids_survive_save_and_reload()
+    {
+        var document = new CadDocument { LinetypeScale = 0.5 };
+        var axes = document.GetOrAddLayer("ASSI");
+        axes.Linetype = document.FindLinetype("CENTER")!;
+        axes.Color = new CadColor(255, 0, 0);
+        var layer0 = document.GetOrAddLayer("0");
+        document.Edit("test", e =>
+        {
+            e.Add(new LineEntity(axes, new Vector2(-10, 0), new Vector2(110, 0)));
+            e.Add(new LineEntity(layer0, Vector2.Zero, new Vector2(0, 50)) { Linetype = document.FindLinetype("HIDDEN"), LinetypeScale = 2 });
+            e.Add(new SolidEntity(layer0, [new Vector2(0, 0), new Vector2(5, 0), new Vector2(5, 2)]));
+            e.Add(new HatchEntity(layer0,
+                [
+                    [new(new Vector2(0, 0)), new(new Vector2(100, 0)), new(new Vector2(100, 50)), new(new Vector2(0, 50))],
+                    [new(new Vector2(40, 25), 1), new(new Vector2(60, 25), 1)],
+                ],
+                "ANSI31", false, HatchPatterns.Build("ANSI31", 2, 0)) { PatternScale = 2 });
+        });
+
+        var path = Path.Combine(_folder, "tratteggi.dxf");
+        DxfExporter.Save(document, path);
+        var reloaded = DxfImporter.Load(path);
+
+        Assert.Empty(reloaded.Errors);
+        var doc = reloaded.Document;
+        Assert.Equal(0.5, doc.LinetypeScale);
+        Assert.Equal("CENTER", doc.FindLayer("ASSI")!.Linetype.Name);
+        Assert.Equal(4, doc.FindLinetype("CENTER")!.Pattern.Count);
+        var hidden = doc.ModelSpace.OfType<LineEntity>().Single(l => l.Layer.Name == "0");
+        Assert.Equal("HIDDEN", hidden.Linetype?.Name);
+        Assert.Equal(2, hidden.LinetypeScale);
+        Assert.Null(doc.ModelSpace.OfType<LineEntity>().Single(l => l.Layer.Name == "ASSI").Linetype);
+
+        var solid = Assert.Single(doc.ModelSpace.OfType<SolidEntity>());
+        Assert.Equal(3, solid.Corners.Count);
+
+        var hatch = Assert.Single(doc.ModelSpace.OfType<HatchEntity>());
+        Assert.Equal("ANSI31", hatch.PatternName);
+        Assert.Equal(2, hatch.Loops.Count);
+        Assert.Equal(1, hatch.Loops[1][0].Bulge, 9);
+        var line = Assert.Single(hatch.PatternLines);
+        Assert.Equal(Math.PI / 4, line.Angle, 6);
+        Assert.Equal(6.35, line.Offset.Length, 6);
+        Assert.Equal(new BoundingBox(Vector2.Zero, new Vector2(100, 50)), hatch.Bounds);
+    }
+}

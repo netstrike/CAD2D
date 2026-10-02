@@ -10,14 +10,18 @@ namespace Cad.App.Controls;
 /// </summary>
 internal sealed class SceneGeometry : IDisposable
 {
-    private SceneGeometry(Scene scene, Vector2 origin, IReadOnlyList<(SKColor Color, SKPath Path)> paths)
+    private SceneGeometry(Scene scene, Vector2 origin, IReadOnlyList<(SKColor Color, SKPath Path)> paths, IReadOnlyList<(SKColor Color, SKPath Path)> fills)
     {
         Scene = scene;
         Origin = origin;
         Paths = paths;
+        Fills = fills;
     }
 
-    public static SceneGeometry Empty { get; } = new(Scene.Empty, Vector2.Zero, []);
+    public static SceneGeometry Empty { get; } = new(Scene.Empty, Vector2.Zero, [], []);
+
+    /// <summary>Aree piene per colore, con regola "diverso da zero" (gli anelli arrivano già orientati).</summary>
+    public IReadOnlyList<(SKColor Color, SKPath Path)> Fills { get; }
 
     public Scene Scene { get; }
     public Vector2 Origin { get; }
@@ -44,7 +48,27 @@ internal sealed class SceneGeometry : IDisposable
             paths.Add((ToSkColor(batch.Color), path));
         }
 
-        return new SceneGeometry(scene, origin, paths);
+        var fills = new List<(SKColor, SKPath)>(scene.Fills.Count);
+        foreach (var batch in scene.Fills)
+        {
+            var path = new SKPath { FillType = SKPathFillType.Winding };
+            foreach (var ring in batch.Rings)
+            {
+                var first = ring[0] - origin;
+                path.MoveTo((float)first.X, (float)first.Y);
+                for (var i = 1; i < ring.Length; i++)
+                {
+                    var p = ring[i] - origin;
+                    path.LineTo((float)p.X, (float)p.Y);
+                }
+
+                path.Close();
+            }
+
+            fills.Add((ToSkColor(batch.Color), path));
+        }
+
+        return new SceneGeometry(scene, origin, paths, fills);
     }
 
     /// <summary>Il nero puro è invisibile su fondo scuro: come negli altri CAD, si disegna bianco.</summary>
@@ -53,7 +77,7 @@ internal sealed class SceneGeometry : IDisposable
 
     public void Dispose()
     {
-        foreach (var (_, path) in Paths)
+        foreach (var (_, path) in Paths.Concat(Fills))
         {
             path.Dispose();
         }

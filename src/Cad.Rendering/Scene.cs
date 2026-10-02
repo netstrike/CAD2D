@@ -21,6 +21,16 @@ public sealed record RenderText(
     CadColor Color,
     BoundingBox Bounds);
 
+/// <summary>
+/// Aree piene dello stesso colore (riempimenti, frecce di quota). Gli anelli sono già orientati per la regola
+/// "diverso da zero": antiorari i contorni, orari i buchi.
+/// </summary>
+public sealed class FillBatch(CadColor color)
+{
+    public CadColor Color { get; } = color;
+    public List<Vector2[]> Rings { get; } = [];
+}
+
 public sealed record RenderPoint(Vector2 Position, CadColor Color);
 
 /// <summary>
@@ -31,9 +41,15 @@ public sealed class Scene
 {
     public static readonly Scene Empty = new([], [], [], 0);
 
-    public Scene(IReadOnlyList<RenderBatch> batches, IReadOnlyList<RenderText> texts, IReadOnlyList<RenderPoint> points, int entityCount)
+    public Scene(
+        IReadOnlyList<RenderBatch> batches,
+        IReadOnlyList<RenderText> texts,
+        IReadOnlyList<RenderPoint> points,
+        int entityCount,
+        IReadOnlyList<FillBatch>? fills = null)
     {
         Batches = batches;
+        Fills = fills ?? [];
         Texts = texts;
         Points = points;
         EntityCount = entityCount;
@@ -48,8 +64,18 @@ public sealed class Scene
             }
         }
 
+        foreach (var fill in Fills)
+        {
+            foreach (var ring in fill.Rings)
+            {
+                bounds = bounds.Union(BoundingBox.FromPoints(ring));
+            }
+        }
+
         Bounds = points.Aggregate(bounds, (b, p) => b.Union(p.Position));
     }
+
+    public IReadOnlyList<FillBatch> Fills { get; }
 
     public IReadOnlyList<RenderBatch> Batches { get; }
     public IReadOnlyList<RenderText> Texts { get; }

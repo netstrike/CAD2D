@@ -44,6 +44,7 @@ public static class DxfExporter
         }
 
         var target = source.Document;
+        target.Header.LineTypeScale = document.LinetypeScale;
         var layers = SyncLayers(document, target);
 
         // Entità convertite all'apertura (o al salvataggio precedente) che oggi non sono più nel modello così come erano.
@@ -68,6 +69,12 @@ public static class DxfExporter
                 if (!SameColor(written.Color, entity.Color))
                 {
                     written.Color = ToAcadColor(entity.Color);
+                }
+
+                var linetype = GetLinetype(target, entity.Linetype);
+                if (!string.Equals(written.LineType?.Name, linetype.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    written.LineType = linetype;
                 }
             }
             else
@@ -95,15 +102,76 @@ public static class DxfExporter
         {
             if (!target.Layers.TryGetValue(layer.Name, out var acadLayer))
             {
-                acadLayer = new Acad.Tables.Layer(layer.Name) { Color = new Acad.Color(layer.Color.R, layer.Color.G, layer.Color.B) };
+                acadLayer = new Acad.Tables.Layer(layer.Name) { Color = ToAcadColor(layer.Color) };
                 target.Layers.Add(acadLayer);
             }
 
+            // Si riscrive solo ciò che è cambiato, per non toccare indici di colore equivalenti.
+            if (!SameColor(acadLayer.Color, EntityColor.Explicit(layer.Color)))
+            {
+                acadLayer.Color = ToAcadColor(layer.Color);
+            }
+
+            var linetype = GetLinetype(target, layer.Linetype);
+            if (!string.Equals(acadLayer.LineType?.Name, linetype.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                acadLayer.LineType = linetype;
+            }
+
             acadLayer.IsOn = layer.IsOn;
+            acadLayer.Flags = SetFlag(SetFlag(acadLayer.Flags, Acad.Tables.LayerFlags.Frozen, layer.IsFrozen), Acad.Tables.LayerFlags.Locked, layer.IsLocked);
             result[layer.Name] = acadLayer;
         }
 
+        // Layer cancellati nel programma e ormai vuoti nel file.
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entity in target.Entities)
+        {
+            if (entity.Layer?.Name is { } name)
+            {
+                used.Add(name);
+            }
+        }
+
+        foreach (var record in target.BlockRecords)
+        {
+            foreach (var entity in record.Entities)
+            {
+                if (entity.Layer?.Name is { } name)
+                {
+                    used.Add(name);
+                }
+            }
+        }
+
+        foreach (var stale in target.Layers.Where(l => !result.ContainsKey(l.Name) && !used.Contains(l.Name) && l.Name != Layer.DefaultName && l.Name != "Defpoints").ToList())
+        {
+            target.Layers.Remove(stale.Name);
+        }
+
         return result;
+    }
+
+    private static Acad.Tables.LayerFlags SetFlag(Acad.Tables.LayerFlags flags, Acad.Tables.LayerFlags flag, bool on) =>
+        on ? flags | flag : flags & ~flag;
+
+    /// <summary>Tipo di linea del file corrispondente: null = DaLayer; crea nella tabella quelli che mancano.</summary>
+    private static Acad.Tables.LineType GetLinetype(Acad.CadDocument target, Linetype? linetype)
+    {
+        var name = linetype is null ? "ByLayer" : ReferenceEquals(linetype, Linetype.ByBlock) ? "ByBlock" : linetype.Name;
+        if (target.LineTypes.TryGetValue(name, out var existing))
+        {
+            return existing;
+        }
+
+        var created = new Acad.Tables.LineType(name) { Description = linetype?.Description ?? string.Empty };
+        foreach (var length in linetype?.Pattern ?? [])
+        {
+            created.AddSegment(new Acad.Tables.LineType.Segment { Length = length });
+        }
+
+        target.LineTypes.Add(created);
+        return created;
     }
 
     /// <summary>
@@ -298,6 +366,9 @@ public static class DxfExporter
     /// <summary>Converte entità del modello in entità ACadSharp, creando i blocchi che mancano nel file.</summary>
     private sealed class BlockWriter(Acad.CadDocument target, Dictionary<string, Acad.Tables.Layer> layers)
     {
+        /// <summary>Codice 76 del DXF: 1 = motivo predefinito (anche SOLID). ACadSharp chiama questo valore SolidFill.</summary>
+        private const AcadEntities.HatchPatternType PredefinedPattern = (AcadEntities.HatchPatternType)1;
+
         public AcadEntities.Entity? Convert(Entity entity)
         {
             AcadEntities.Entity? result = entity switch
@@ -311,6 +382,8 @@ public static class DxfExporter
                 PointEntity point => new AcadEntities.Point { Location = ToXyz(point.Position) },
                 TextEntity text => ConvertText(text),
                 InsertEntity insert => ConvertInsert(insert),
+                SolidEntity solid => ConvertSolid(solid),
+                HatchEntity hatch => ConvertHatch(hatch),
                 _ => null,
             };
 
@@ -318,6 +391,53 @@ public static class DxfExporter
             {
                 result.Layer = layers.TryGetValue(entity.Layer.Name, out var layer) ? layer : target.Layers[Layer.DefaultName];
                 result.Color = ToAcadColor(entity.Color);
+                result.LineType = GetLinetype(target, entity.Linetype);
+                result.LineTypeScale = entity.LinetypeScale;
+            }
+
+            return result;
+        }
+
+        private static AcadEntities.Solid ConvertSolid(SolidEntity solid)
+        {
+            // Ordine DXF "a Z": il terzo vertice del contorno è il quarto del SOLID.
+            var c = solid.Corners;
+            var fourth = c.Count >= 4 ? c[3] : c[^1];
+            return new AcadEntities.Solid(ToXyz(c[0]), ToXyz(c[1]), ToXyz(fourth), ToXyz(c.Count >= 3 ? c[2] : c[^1]));
+        }
+
+        private static AcadEntities.Hatch ConvertHatch(HatchEntity hatch)
+        {
+            var result = new AcadEntities.Hatch
+            {
+                IsSolid = hatch.IsSolid,
+                PatternType = PredefinedPattern,
+                PatternAngle = hatch.PatternAngle,
+                PatternScale = hatch.PatternScale,
+                Pattern = hatch.IsSolid ? AcadEntities.HatchPattern.Solid : new AcadEntities.HatchPattern(hatch.PatternName),
+            };
+
+            if (!hatch.IsSolid)
+            {
+                foreach (var line in hatch.PatternLines)
+                {
+                    result.Pattern.Lines.Add(new AcadEntities.HatchPattern.Line
+                    {
+                        Angle = line.Angle,
+                        BasePoint = new XY(line.BasePoint.X, line.BasePoint.Y),
+                        Offset = new XY(line.Offset.X, line.Offset.Y),
+                        DashLengths = [.. line.Dashes],
+                    });
+                }
+            }
+
+            foreach (var loop in hatch.Loops)
+            {
+                var edge = new AcadEntities.Hatch.BoundaryPath.Polyline { IsClosed = true };
+                edge.Vertices.AddRange(loop.Select(v => new XYZ(v.Position.X, v.Position.Y, v.Bulge)));
+                var path = new AcadEntities.Hatch.BoundaryPath { Flags = AcadEntities.BoundaryPathFlags.External | AcadEntities.BoundaryPathFlags.Polyline };
+                path.Edges.Add(edge);
+                result.Paths.Add(path);
             }
 
             return result;

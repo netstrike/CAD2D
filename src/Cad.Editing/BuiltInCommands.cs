@@ -20,6 +20,7 @@ internal static class BuiltInCommands
         editor.RegisterCommand("ANNULLA", Undo, "U", "UNDO");
         editor.RegisterCommand("RIPETI", Redo, "REDO");
         ModifyCommands.Register(editor);
+        DraftingCommands.Register(editor);
     }
 
     private static async Task Line(Editor ed)
@@ -40,7 +41,7 @@ internal static class BuiltInCommands
             switch (next.Status)
             {
                 case PromptStatus.Keyword when next.Keyword == "Chiudi":
-                    ed.Document.Edit("LINEA", e => e.Add(new LineEntity(ed.CurrentLayer, last, points[0])));
+                    ed.Document.Edit("LINEA", e => e.Add(ed.Styled(new LineEntity(ed.CurrentLayer, last, points[0]))));
                     return;
                 case PromptStatus.Keyword when next.Keyword == "Annulla":
                     ed.Document.History.Undo();
@@ -48,7 +49,7 @@ internal static class BuiltInCommands
                     segments--;
                     continue;
                 case PromptStatus.Ok when !next.Point.IsAlmostEqual(last):
-                    ed.Document.Edit("LINEA", e => e.Add(new LineEntity(ed.CurrentLayer, last, next.Point)));
+                    ed.Document.Edit("LINEA", e => e.Add(ed.Styled(new LineEntity(ed.CurrentLayer, last, next.Point))));
                     points.Add(next.Point);
                     segments++;
                     continue;
@@ -92,7 +93,7 @@ internal static class BuiltInCommands
             return;
         }
 
-        ed.Document.Edit("CERCHIO", e => e.Add(new CircleEntity(ed.CurrentLayer, c, value)));
+        ed.Document.Edit("CERCHIO", e => e.Add(ed.Styled(new CircleEntity(ed.CurrentLayer, c, value))));
     }
 
     private static async Task Arc(Editor ed)
@@ -124,7 +125,7 @@ internal static class BuiltInCommands
             return;
         }
 
-        ed.Document.Edit("ARCO", e => e.Add(arc[0]));
+        ed.Document.Edit("ARCO", e => e.Add(ed.Styled(arc[0])));
     }
 
     private static Entity[] ArcThrough(Layer layer, Vector2 start, Vector2 through, Vector2 end) =>
@@ -183,7 +184,7 @@ internal static class BuiltInCommands
             return;
         }
 
-        ed.Document.Edit("POLILINEA", e => e.Add(new PolylineEntity(ed.CurrentLayer, points.Select(p => new PolylineVertex(p)), closed)));
+        ed.Document.Edit("POLILINEA", e => e.Add(ed.Styled(new PolylineEntity(ed.CurrentLayer, points.Select(p => new PolylineVertex(p)), closed))));
     }
 
     private static async Task Rectangle(Editor ed)
@@ -207,7 +208,7 @@ internal static class BuiltInCommands
             return;
         }
 
-        ed.Document.Edit("RETTANGOLO", e => e.Add(RectangleEntity(ed.CurrentLayer, a, second.Point)));
+        ed.Document.Edit("RETTANGOLO", e => e.Add(ed.Styled(RectangleEntity(ed.CurrentLayer, a, second.Point))));
     }
 
     private static PolylineEntity RectangleEntity(Layer layer, Vector2 a, Vector2 b) => new(

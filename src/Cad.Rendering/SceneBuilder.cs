@@ -16,14 +16,14 @@ public static class SceneBuilder
 
     public static Scene Build(CadDocument document)
     {
-        var builder = new Builder();
-        var root = new Context(Matrix2D.Identity, null, CadColor.White, 0);
+        var builder = new Builder { LinetypeScale = document.LinetypeScale };
+        var root = new Context(Matrix2D.Identity, null, CadColor.White, Linetype.Continuous, 0);
         foreach (var entity in document.ModelSpace)
         {
             builder.Add(entity, root);
         }
 
-        return new Scene([.. builder.Batches.Values], builder.Texts, builder.Points, builder.EntityCount);
+        return builder.ToScene();
     }
 
     /// <summary>
@@ -32,18 +32,19 @@ public static class SceneBuilder
     /// </summary>
     public static Scene BuildEntities(IEnumerable<Entity> entities, CadColor? color = null)
     {
-        var builder = new Builder { ColorOverride = color, IgnoreVisibility = true };
-        var root = new Context(Matrix2D.Identity, null, CadColor.White, 0);
+        // Anteprime ed evidenziazione: linee continue, i tratteggi bastano come contorno.
+        var builder = new Builder { ColorOverride = color, IgnoreVisibility = true, IgnoreLinetypes = true, HatchOutlinesOnly = color is not null };
+        var root = new Context(Matrix2D.Identity, null, CadColor.White, Linetype.Continuous, 0);
         foreach (var entity in entities)
         {
             builder.Add(entity, root);
         }
 
-        return new Scene([.. builder.Batches.Values], builder.Texts, builder.Points, builder.EntityCount);
+        return builder.ToScene();
     }
 
     /// <summary>Stato ereditato da un inserimento di blocco verso le entità che contiene.</summary>
-    private readonly record struct Context(Matrix2D Transform, Layer? InsertLayer, CadColor InsertColor, int Depth);
+    private readonly record struct Context(Matrix2D Transform, Layer? InsertLayer, CadColor InsertColor, Linetype InsertLinetype, int Depth);
 
     private sealed class Builder
     {
@@ -51,8 +52,14 @@ public static class SceneBuilder
         public List<RenderText> Texts { get; } = [];
         public List<RenderPoint> Points { get; } = [];
         public int EntityCount { get; private set; }
+        public Dictionary<CadColor, FillBatch> Fills { get; } = [];
         public CadColor? ColorOverride { get; init; }
         public bool IgnoreVisibility { get; init; }
+        public bool IgnoreLinetypes { get; init; }
+        public bool HatchOutlinesOnly { get; init; }
+        public double LinetypeScale { get; init; } = 1;
+
+        public Scene ToScene() => new([.. Batches.Values], Texts, Points, EntityCount, [.. Fills.Values]);
 
         public void Add(Entity entity, Context context)
         {
@@ -72,33 +79,47 @@ public static class SceneBuilder
                 _ => layer.Color,
             };
 
+            var linetype = entity.Linetype is null ? layer.Linetype
+                : ReferenceEquals(entity.Linetype, Linetype.ByBlock) ? context.InsertLinetype
+                : entity.Linetype;
+
             if (entity is InsertEntity insert)
             {
-                AddInsert(insert, context, layer, color);
+                AddInsert(insert, context, layer, color, linetype);
                 return;
             }
 
             EntityCount++;
             var m = context.Transform;
+            var dash = IgnoreLinetypes || linetype.IsContinuous
+                ? null
+                : linetype.Pattern;
+            var dashScale = LinetypeScale * entity.LinetypeScale * Math.Sqrt(Math.Abs(m.Determinant));
             switch (entity)
             {
                 case LineEntity line:
-                    AddPolyline(color, [m.Transform(line.Start), m.Transform(line.End)]);
+                    AddCurve(color, [m.Transform(line.Start), m.Transform(line.End)], dash, dashScale);
                     break;
                 case CircleEntity circle:
-                    AddPolyline(color, Tessellate(new Arc2D(circle.Center, circle.Radius, 0, Math.Tau), m));
+                    AddCurve(color, Tessellate(new Arc2D(circle.Center, circle.Radius, 0, Math.Tau), m), dash, dashScale);
                     break;
                 case ArcEntity arc:
-                    AddPolyline(color, Tessellate(arc.Arc, m));
+                    AddCurve(color, Tessellate(arc.Arc, m), dash, dashScale);
                     break;
                 case EllipseEntity ellipse:
-                    AddPolyline(color, Tessellate(ellipse, m));
+                    AddCurve(color, Tessellate(ellipse, m), dash, dashScale);
                     break;
                 case PolylineEntity polyline:
-                    AddPolyline(color, Tessellate(polyline, m));
+                    AddCurve(color, Tessellate(polyline, m), dash, dashScale);
                     break;
                 case PolylinePathEntity path:
-                    AddPolyline(color, [.. path.Points.Select(m.Transform), .. path.IsClosed && path.Points.Count > 0 ? [m.Transform(path.Points[0])] : Array.Empty<Vector2>()]);
+                    AddCurve(color, [.. path.Points.Select(m.Transform), .. path.IsClosed && path.Points.Count > 0 ? [m.Transform(path.Points[0])] : Array.Empty<Vector2>()], dash, dashScale);
+                    break;
+                case SolidEntity solid:
+                    AddFill(color, [[.. solid.Corners.Select(m.Transform)]]);
+                    break;
+                case HatchEntity hatch:
+                    AddHatch(hatch, m, color);
                     break;
                 case PointEntity point:
                     Points.Add(new RenderPoint(m.Transform(point.Position), color));
@@ -109,24 +130,82 @@ public static class SceneBuilder
             }
         }
 
-        private void AddInsert(InsertEntity insert, Context context, Layer layer, CadColor color)
+        private void AddInsert(InsertEntity insert, Context context, Layer layer, CadColor color, Linetype linetype)
         {
             if (context.Depth >= MaxDepth)
             {
                 return;
             }
 
-            var inner = new Context(insert.Transform * context.Transform, layer, color, context.Depth + 1);
+            var inner = new Context(insert.Transform * context.Transform, layer, color, linetype, context.Depth + 1);
             foreach (var child in insert.Block.Entities)
             {
                 Add(child, inner);
             }
 
             // Gli attributi sono già in coordinate del contenitore dell'inserimento.
-            var attributes = context with { InsertLayer = layer, InsertColor = color, Depth = context.Depth + 1 };
+            var attributes = context with { InsertLayer = layer, InsertColor = color, InsertLinetype = linetype, Depth = context.Depth + 1 };
             foreach (var attribute in insert.Attributes)
             {
                 Add(attribute, attributes);
+            }
+        }
+
+        private void AddCurve(CadColor color, Vector2[] points, IReadOnlyList<double>? dash, double dashScale)
+        {
+            if (dash is null)
+            {
+                AddPolyline(color, points);
+                return;
+            }
+
+            foreach (var piece in Patterns.Dash(points, dash, dashScale))
+            {
+                AddPolyline(color, piece);
+            }
+        }
+
+        private void AddFill(CadColor color, IReadOnlyList<Vector2[]> rings)
+        {
+            if (!Fills.TryGetValue(color, out var batch))
+            {
+                batch = new FillBatch(color);
+                Fills.Add(color, batch);
+            }
+
+            batch.Rings.AddRange(Patterns.OrientForWinding(rings));
+        }
+
+        private void AddHatch(HatchEntity hatch, Matrix2D m, CadColor color)
+        {
+            var rings = hatch.Loops
+                .Select(loop => Tessellate(new PolylineEntity(hatch.Layer, loop, isClosed: true), m))
+                .Where(r => r.Length >= 3)
+                .ToList();
+            if (HatchOutlinesOnly)
+            {
+                foreach (var ring in rings)
+                {
+                    AddPolyline(color, ring);
+                }
+
+                return;
+            }
+
+            if (hatch.IsSolid)
+            {
+                AddFill(color, rings);
+                return;
+            }
+
+            var budget = new Ref<int>(Patterns.MaxHatchSegments);
+            foreach (var line in hatch.PatternLines)
+            {
+                var transformed = line.Transformed(m);
+                foreach (var (from, to) in Patterns.HatchLines(rings, transformed, budget))
+                {
+                    AddPolyline(color, [from, to]);
+                }
             }
         }
 

@@ -265,7 +265,6 @@ public sealed class Curve
             result = new PolylineEntity(template.Layer, vertices, closed);
         }
 
-        result.Color = template.Color;
-        return result;
+        return result.CopyStyleFrom<Entity>(template);
     }
 }

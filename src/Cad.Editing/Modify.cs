@@ -486,7 +486,7 @@ public static class Modify
             }
         }
 
-        var polylineResult = new PolylineEntity(polyline.Layer, result, polyline.IsClosed) { Color = polyline.Color };
+        var polylineResult = new PolylineEntity(polyline.Layer, result, polyline.IsClosed).CopyStyleFrom<PolylineEntity>(polyline);
         return (polylineResult, filleted, skipped);
     }
 
@@ -516,6 +516,11 @@ public static class Modify
                         exploded.Color = insert.Color;
                     }
 
+                    if (ReferenceEquals(child.Linetype, Linetype.ByBlock))
+                    {
+                        exploded.Linetype = insert.Linetype;
+                    }
+
                     result.Add(exploded);
                 }
 
@@ -525,27 +530,21 @@ public static class Modify
             }
 
             case PolylineEntity polyline when Curve.From(polyline) is { } curve:
-                return [.. curve.Pieces.Select(p => Curve.ToEntity([p], new LineEntity(polyline.Layer, p.Start, p.End) { Color = polyline.Color })!)];
+                return [.. curve.Pieces.Select(p => Curve.ToEntity([p], new LineEntity(polyline.Layer, p.Start, p.End))!.CopyStyleFrom<Entity>(polyline))];
 
             default:
                 return null;
         }
     }
 
-    private static TextEntity CopyText(TextEntity text) => new(text.Layer, text.Position, text.Height, text.Value)
+    private static TextEntity CopyText(TextEntity text) => new TextEntity(text.Layer, text.Position, text.Height, text.Value)
     {
-        Color = text.Color,
         Rotation = text.Rotation,
         WidthFactor = text.WidthFactor,
         LineSpacing = text.LineSpacing,
         HorizontalAlignment = text.HorizontalAlignment,
         VerticalAlignment = text.VerticalAlignment,
-    };
+    }.CopyStyleFrom<TextEntity>(text);
 
-    private static T WithStyle<T>(T entity, Entity template) where T : Entity
-    {
-        entity.Layer = template.Layer;
-        entity.Color = template.Color;
-        return entity;
-    }
+    private static T WithStyle<T>(T entity, Entity template) where T : Entity => entity.CopyStyleFrom<T>(template);
 }

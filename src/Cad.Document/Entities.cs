@@ -9,6 +9,22 @@ public abstract class Entity
     public Layer Layer { get; set; }
     public EntityColor Color { get; set; } = EntityColor.ByLayer;
 
+    /// <summary>Tipo di linea; null = DaLayer, <see cref="Document.Linetype.ByBlock"/> = DaBlocco.</summary>
+    public Linetype? Linetype { get; set; }
+
+    /// <summary>Fattore che moltiplica la scala globale dei tipi di linea.</summary>
+    public double LinetypeScale { get; set; } = 1;
+
+    /// <summary>Copia layer, colore e tipo di linea da un'altra entità.</summary>
+    public T CopyStyleFrom<T>(Entity other) where T : Entity
+    {
+        Layer = other.Layer;
+        Color = other.Color;
+        Linetype = other.Linetype;
+        LinetypeScale = other.LinetypeScale;
+        return (T)this;
+    }
+
     /// <summary>
     /// Oggetto da cui l'entità è stata letta (per esempio l'entità ACadSharp). Serve al salvataggio per riscrivere
     /// intatto ciò che non è stato modificato. Le copie e le entità trasformate non lo ereditano.
@@ -31,8 +47,7 @@ public abstract class Entity
     public Entity Transformed(Matrix2D m)
     {
         var result = TransformCore(m);
-        result.Layer = Layer;
-        result.Color = Color;
+        result.CopyStyleFrom<Entity>(this);
         result.DerivedFrom = SourceTag is not null
             ? new SourceTransform(SourceTag, m)
             : DerivedFrom is { } d ? d with { Transform = d.Transform * m } : null;
@@ -42,10 +57,7 @@ public abstract class Entity
     /// <summary>Nuova entità con il grip <paramref name="index"/> spostato in <paramref name="position"/>.</summary>
     public Entity WithGripMoved(int index, Vector2 position)
     {
-        var result = MoveGripCore(index, position);
-        result.Layer = Layer;
-        result.Color = Color;
-        return result;
+        return MoveGripCore(index, position).CopyStyleFrom<Entity>(this);
     }
 
     protected abstract Entity TransformCore(Matrix2D m);
@@ -404,5 +416,65 @@ public sealed class InsertEntity(Layer layer, BlockDefinition block) : Entity(la
                 ]);
             return Attributes.Aggregate(box, (b, a) => b.Union(a.Bounds));
         }
+    }
+}
+
+/// <summary>Quadrilatero o triangolo pieno (SOLID): le punte delle frecce di quota, per esempio. Vertici in ordine di contorno.</summary>
+public sealed class SolidEntity(Layer layer, IEnumerable<Vector2> corners) : Entity(layer)
+{
+    public List<Vector2> Corners { get; } = [.. corners];
+    public override BoundingBox Bounds => BoundingBox.FromPoints(Corners);
+    public override IReadOnlyList<Vector2> Grips => Corners;
+
+    protected override Entity TransformCore(Matrix2D m) => new SolidEntity(Layer, Corners.Select(m.Transform));
+
+    protected override Entity MoveGripCore(int index, Vector2 position) =>
+        new SolidEntity(Layer, Corners.Select((c, i) => i == index ? position : c));
+}
+
+/// <summary>
+/// Famiglia di linee parallele di un motivo di tratteggio, già in coordinate di disegno: direzione <see cref="Angle"/>,
+/// passante per <see cref="BasePoint"/>, ripetuta a passi di <see cref="Offset"/>, con tratti e spazi <see cref="Dashes"/>
+/// (vuoto = linea continua).
+/// </summary>
+public sealed record HatchPatternLine(double Angle, Vector2 BasePoint, Vector2 Offset, IReadOnlyList<double> Dashes)
+{
+    public HatchPatternLine Transformed(Matrix2D m)
+    {
+        var direction = m.TransformVector(Vector2.FromPolar(1, Angle));
+        var scale = direction.Length;
+        return new HatchPatternLine(direction.Angle, m.Transform(BasePoint), m.TransformVector(Offset), [.. Dashes.Select(d => d * scale)]);
+    }
+}
+
+/// <summary>
+/// Tratteggio o riempimento: contorni chiusi (regola pari/dispari: un contorno dentro un altro è un'isola) e il motivo.
+/// </summary>
+public sealed class HatchEntity(Layer layer, IEnumerable<IReadOnlyList<PolylineVertex>> loops, string patternName, bool isSolid, IEnumerable<HatchPatternLine> lines)
+    : Entity(layer)
+{
+    public List<IReadOnlyList<PolylineVertex>> Loops { get; } = [.. loops];
+    public string PatternName { get; } = patternName;
+    public bool IsSolid { get; } = isSolid;
+    public List<HatchPatternLine> PatternLines { get; } = [.. lines];
+
+    /// <summary>Scala e angolo con cui è stato generato il motivo (informativi: le linee sono già scalate e ruotate).</summary>
+    public double PatternScale { get; set; } = 1;
+    public double PatternAngle { get; set; }
+
+    public override BoundingBox Bounds => Loops.Aggregate(BoundingBox.Empty, (box, loop) => box.Union(new PolylineEntity(Layer, loop, true).Bounds));
+
+    public override IReadOnlyList<Vector2> Grips => Loops.Count > 0 && Loops[0].Count > 0 ? [Loops[0][0].Position] : [];
+
+    protected override Entity TransformCore(Matrix2D m)
+    {
+        var flip = m.Determinant < 0 ? -1 : 1;
+        var loops = Loops.Select(loop => (IReadOnlyList<PolylineVertex>)[.. loop.Select(v => new PolylineVertex(m.Transform(v.Position), v.Bulge * flip))]);
+        var scale = LinearScale(m);
+        return new HatchEntity(Layer, loops, PatternName, IsSolid, PatternLines.Select(l => l.Transformed(m)))
+        {
+            PatternScale = PatternScale * scale,
+            PatternAngle = TransformAngle(m, PatternAngle),
+        };
     }
 }

@@ -77,6 +77,15 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
 
         canvas.Save();
         canvas.Concat(ref matrix);
+        using (var fill = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true })
+        {
+            foreach (var (color, path) in geometry.Fills)
+            {
+                fill.Color = color;
+                canvas.DrawPath(path, fill);
+            }
+        }
+
         // StrokeWidth 0 = linea sottile di un pixel a qualunque livello di zoom.
         using var paint = new SKPaint { StrokeWidth = 0, Style = SKPaintStyle.Stroke, IsAntialias = true };
         foreach (var (color, path) in geometry.Paths)

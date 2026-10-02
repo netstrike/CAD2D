@@ -9,6 +9,7 @@ public sealed class CadDocument
 {
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, BlockDefinition> _blocks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Linetype> _linetypes = new(StringComparer.OrdinalIgnoreCase);
 
     private int _savedDepth;
     private bool _savedStateLost;
@@ -16,6 +17,12 @@ public sealed class CadDocument
     public CadDocument()
     {
         GetOrAddLayer(Layer.DefaultName);
+        AddLinetype(Linetype.Continuous);
+        foreach (var linetype in Linetype.Standard)
+        {
+            AddLinetype(linetype);
+        }
+
         History = new UndoHistory(this);
     }
 
@@ -59,6 +66,13 @@ public sealed class CadDocument
         _savedStateLost = false;
     }
 
+    /// <summary>Modifica fuori dalla cronologia (proprietà dei layer, scala dei tipi di linea): va salvata, non si annulla.</summary>
+    public void MarkModified()
+    {
+        _savedStateLost = true;
+        RaiseChanged();
+    }
+
     /// <summary>Da chiamare dopo modifiche fuori dalla cronologia, come accendere o spegnere un layer.</summary>
     public void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
 
@@ -81,6 +95,26 @@ public sealed class CadDocument
     }
 
     public Layer? FindLayer(string name) => _layers.GetValueOrDefault(name);
+
+    public IEnumerable<Linetype> Linetypes => _linetypes.Values;
+
+    /// <summary>Scala globale dei tipi di linea (LTSCALE).</summary>
+    public double LinetypeScale { get; set; } = 1;
+
+    public Linetype? FindLinetype(string name) => _linetypes.GetValueOrDefault(name);
+
+    /// <summary>Aggiunge o sostituisce un tipo di linea con lo stesso nome (quello letto dal file vince su quello standard).</summary>
+    public Linetype AddLinetype(Linetype linetype)
+    {
+        _linetypes[linetype.Name] = linetype;
+        return linetype;
+    }
+
+    public bool RemoveLayer(Layer layer) =>
+        layer.Name != Layer.DefaultName &&
+        !ModelSpace.Any(e => e.Layer == layer) &&
+        !Blocks.Any(b => b.Entities.Any(e => e.Layer == layer)) &&
+        _layers.Remove(layer.Name);
 
     public BlockDefinition GetOrAddBlock(string name)
     {
