@@ -201,8 +201,20 @@ public partial class MainWindow : Window
         if (_editor is not null)
         {
             PromptText.Text = _editor.Prompt;
+            if (_editor.PromptId != _shownPromptId)
+            {
+                // Testo proposto (es. MODIFICATESTO): si parte da quello, pronto da correggere.
+                _shownPromptId = _editor.PromptId;
+                if (_editor.SuggestedInput is { } suggested)
+                {
+                    CommandBox.Text = suggested;
+                    CommandBox.CaretIndex = suggested.Length;
+                }
+            }
         }
     }
+
+    private int _shownPromptId;
 
     private void AppendHistory(string line)
     {

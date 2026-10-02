@@ -258,4 +258,41 @@ public sealed class DxfDraftingRoundTripTests : IDisposable
         Assert.Equal(6.35, line.Offset.Length, 6);
         Assert.Equal(new BoundingBox(Vector2.Zero, new Vector2(100, 50)), hatch.Bounds);
     }
+
+    [Fact]
+    public void Dimensions_and_texts_survive_save_and_reload()
+    {
+        var document = new CadDocument();
+        var layer = document.GetOrAddLayer("QUOTE");
+        var style = document.CurrentDimensionStyle;
+        style.TextHeight = 3.5;
+        document.Edit("test", e =>
+        {
+            e.Add(new DimensionEntity(layer, DimensionKind.Linear, style) { First = new Vector2(0, 0), Second = new Vector2(100, 30), Location = new Vector2(50, 50) });
+            e.Add(new DimensionEntity(layer, DimensionKind.Aligned, style) { First = new Vector2(0, 0), Second = new Vector2(30, 40), Location = new Vector2(-10, 30), TextOverride = "<> max" });
+            e.Add(new DimensionEntity(layer, DimensionKind.Radius, style) { First = new Vector2(200, 0), Second = new Vector2(210, 0), Location = new Vector2(220, 5) });
+            e.Add(new DimensionEntity(layer, DimensionKind.Diameter, style) { First = new Vector2(200, 0), Second = new Vector2(200, 10), Location = new Vector2(200, 20) });
+            e.Add(new DimensionEntity(layer, DimensionKind.Angular, style) { Vertex = new Vector2(0, 100), First = new Vector2(50, 100), Second = new Vector2(0, 150), Location = new Vector2(30, 130) });
+            e.Add(new TextEntity(layer, new Vector2(0, -20), 5, "Riga uno\nRiga due"));
+        });
+
+        var path = Path.Combine(_folder, "quote.dxf");
+        DxfExporter.Save(document, path);
+        var reloaded = DxfImporter.Load(path);
+
+        Assert.Empty(reloaded.Errors);
+        var dimensions = reloaded.Document.ModelSpace.OfType<DimensionEntity>().ToList();
+        Assert.Equal(5, dimensions.Count);
+        Assert.Equal(100, dimensions.Single(d => d.Kind == DimensionKind.Linear).Measurement, 9);
+        var aligned = dimensions.Single(d => d.Kind == DimensionKind.Aligned);
+        Assert.Equal(50, aligned.Measurement, 9);
+        Assert.Equal("50 max", aligned.Text);
+        Assert.Equal(10, dimensions.Single(d => d.Kind == DimensionKind.Radius).Measurement, 9);
+        Assert.Equal(20, dimensions.Single(d => d.Kind == DimensionKind.Diameter).Measurement, 9);
+        Assert.Equal(90, dimensions.Single(d => d.Kind == DimensionKind.Angular).Measurement, 9);
+        Assert.All(dimensions, d => Assert.Equal("QUOTE", d.Layer.Name));
+        Assert.Equal(3.5, dimensions[0].Style.TextHeight, 9);
+        Assert.All(dimensions, d => Assert.NotNull(d.Graphics));
+        Assert.Equal("Riga uno\nRiga due", Assert.Single(reloaded.Document.ModelSpace.OfType<TextEntity>()).Value);
+    }
 }

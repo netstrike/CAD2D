@@ -10,6 +10,7 @@ public sealed class CadDocument
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, BlockDefinition> _blocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Linetype> _linetypes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DimensionStyle> _dimensionStyles = new(StringComparer.OrdinalIgnoreCase);
 
     private int _savedDepth;
     private bool _savedStateLost;
@@ -23,6 +24,7 @@ public sealed class CadDocument
             AddLinetype(linetype);
         }
 
+        CurrentDimensionStyle = GetOrAddDimensionStyle(DimensionStyle.DefaultName);
         History = new UndoHistory(this);
     }
 
@@ -95,6 +97,22 @@ public sealed class CadDocument
     }
 
     public Layer? FindLayer(string name) => _layers.GetValueOrDefault(name);
+
+    public IEnumerable<DimensionStyle> DimensionStyles => _dimensionStyles.Values;
+
+    /// <summary>Stile delle quote nuove.</summary>
+    public DimensionStyle CurrentDimensionStyle { get; set; }
+
+    public DimensionStyle GetOrAddDimensionStyle(string name)
+    {
+        if (!_dimensionStyles.TryGetValue(name, out var style))
+        {
+            style = new DimensionStyle(name);
+            _dimensionStyles.Add(name, style);
+        }
+
+        return style;
+    }
 
     public IEnumerable<Linetype> Linetypes => _linetypes.Values;
 

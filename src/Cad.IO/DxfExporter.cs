@@ -383,6 +383,7 @@ public static class DxfExporter
                 TextEntity text => ConvertText(text),
                 InsertEntity insert => ConvertInsert(insert),
                 SolidEntity solid => ConvertSolid(solid),
+                DimensionEntity dimension => ConvertDimension(dimension),
                 HatchEntity hatch => ConvertHatch(hatch),
                 _ => null,
             };
@@ -396,6 +397,115 @@ public static class DxfExporter
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Quota DXF con i suoi punti di definizione e la grafica in un blocco anonimo, così gli altri CAD la mostrano
+        /// identica e possono comunque ricalcolarla.
+        /// </summary>
+        private AcadEntities.Dimension ConvertDimension(DimensionEntity dimension)
+        {
+            var record = new Acad.Tables.BlockRecord(UniqueAnonymousName(target, "*D"));
+            var parts = dimension.Graphics is { } graphics
+                ? graphics.Entities.Select(e => e.Transformed(dimension.GraphicsTransform)).ToList()
+                : [.. dimension.Explode()];
+            foreach (var part in parts)
+            {
+                if (Convert(part) is { } converted)
+                {
+                    record.Entities.Add(converted);
+                }
+            }
+
+            target.BlockRecords.Add(record);
+
+            AcadEntities.Dimension result;
+            switch (dimension.Kind)
+            {
+                case DimensionKind.Linear:
+                case DimensionKind.Aligned:
+                {
+                    var direction = dimension.Kind == DimensionKind.Linear
+                        ? Vector2.FromPolar(1, dimension.Rotation)
+                        : (dimension.Second - dimension.First).Normalized();
+                    var normal = direction.Perpendicular();
+                    var onLine = dimension.Second + normal * Vector2.Dot(dimension.Location - dimension.Second, normal);
+                    if (dimension.Kind == DimensionKind.Linear)
+                    {
+                        result = new AcadEntities.DimensionLinear { Rotation = dimension.Rotation };
+                    }
+                    else
+                    {
+                        result = new AcadEntities.DimensionAligned();
+                    }
+
+                    var aligned = (AcadEntities.DimensionAligned)result;
+                    aligned.FirstPoint = ToXyz(dimension.First);
+                    aligned.SecondPoint = ToXyz(dimension.Second);
+                    aligned.DefinitionPoint = ToXyz(onLine);
+                    break;
+                }
+
+                case DimensionKind.Radius:
+                    result = new AcadEntities.DimensionRadius
+                    {
+                        DefinitionPoint = ToXyz(dimension.First),
+                        AngleVertex = ToXyz(dimension.Second),
+                        LeaderLength = Vector2.Distance(dimension.Second, dimension.Location),
+                    };
+                    break;
+
+                case DimensionKind.Diameter:
+                    result = new AcadEntities.DimensionDiameter
+                    {
+                        DefinitionPoint = ToXyz(2 * dimension.First - dimension.Second),
+                        AngleVertex = ToXyz(dimension.Second),
+                    };
+                    break;
+
+                default:
+                    result = new AcadEntities.DimensionAngular3Pt
+                    {
+                        DefinitionPoint = ToXyz(dimension.Location),
+                        FirstPoint = ToXyz(dimension.First),
+                        SecondPoint = ToXyz(dimension.Second),
+                        AngleVertex = ToXyz(dimension.Vertex),
+                    };
+                    break;
+            }
+
+            result.Block = record;
+            result.Style = GetDimensionStyle(dimension.Style);
+            result.Text = dimension.TextOverride ?? string.Empty;
+            if (parts.OfType<TextEntity>().FirstOrDefault() is { } text)
+            {
+                result.TextMiddlePoint = ToXyz(text.Position);
+            }
+
+            return result;
+        }
+
+        private Acad.Tables.DimensionStyle GetDimensionStyle(DimensionStyle style)
+        {
+            if (!target.DimensionStyles.TryGetValue(style.Name, out var acad))
+            {
+                acad = new Acad.Tables.DimensionStyle(style.Name);
+                target.DimensionStyles.Add(acad);
+            }
+
+            acad.TextHeight = style.TextHeight;
+            acad.ArrowSize = style.ArrowSize;
+            acad.ExtensionLineOffset = style.ExtensionOffset;
+            acad.ExtensionLineExtension = style.ExtensionExtend;
+            acad.DimensionLineGap = style.TextGap;
+            acad.DecimalPlaces = (short)style.Decimals;
+            acad.DecimalSeparator = style.DecimalSeparator;
+            acad.ScaleFactor = style.Scale;
+            acad.TextVerticalAlignment = Acad.Tables.DimensionTextVerticalAlignment.Above;
+            acad.TextInsideHorizontal = false;
+            acad.TextOutsideHorizontal = false;
+            acad.ZeroHandling = Acad.Tables.ZeroHandling.SuppressDecimalTrailingZeroes;
+            return acad;
         }
 
         private static AcadEntities.Solid ConvertSolid(SolidEntity solid)

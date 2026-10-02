@@ -221,10 +221,15 @@ public static class DxfImporter
                     return ConvertInsert(insert, layer, depth);
 
                 // Le quote hanno la loro grafica già pronta in un blocco anonimo, in coordinate mondo.
-                case AcadEntities.Dimension { Block: { } block }:
+                case AcadEntities.Dimension { Block: { } block } dimension:
                 {
                     var definition = ConvertBlock(block, depth);
-                    return definition is null ? null : new InsertEntity(layer, definition);
+                    if (definition is null)
+                    {
+                        return null;
+                    }
+
+                    return ConvertDimension(dimension, layer, definition) ?? (Entity)new InsertEntity(layer, definition);
                 }
 
                 case AcadEntities.Solid solid:
@@ -246,6 +251,86 @@ public static class DxfImporter
                 default:
                     return null;
             }
+        }
+
+        /// <summary>Quote dei tipi gestiti: punti di definizione e grafica originale. Le altre restano blocchi.</summary>
+        private DimensionEntity? ConvertDimension(AcadEntities.Dimension source, Layer layer, BlockDefinition graphics)
+        {
+            if (source.Normal.Z < 0.999)
+            {
+                return null;
+            }
+
+            var style = ConvertDimensionStyle(source.Style);
+            DimensionEntity? result = source switch
+            {
+                AcadEntities.DimensionLinear linear => new DimensionEntity(layer, DimensionKind.Linear, style)
+                {
+                    First = ToVector(linear.FirstPoint),
+                    Second = ToVector(linear.SecondPoint),
+                    Location = ToVector(linear.DefinitionPoint),
+                    Rotation = linear.Rotation,
+                },
+                AcadEntities.DimensionAligned aligned => new DimensionEntity(layer, DimensionKind.Aligned, style)
+                {
+                    First = ToVector(aligned.FirstPoint),
+                    Second = ToVector(aligned.SecondPoint),
+                    Location = ToVector(aligned.DefinitionPoint),
+                },
+                AcadEntities.DimensionRadius radius => new DimensionEntity(layer, DimensionKind.Radius, style)
+                {
+                    First = ToVector(radius.DefinitionPoint),
+                    Second = ToVector(radius.AngleVertex),
+                    Location = ToVector(radius.TextMiddlePoint),
+                },
+                AcadEntities.DimensionDiameter diameter => new DimensionEntity(layer, DimensionKind.Diameter, style)
+                {
+                    First = (ToVector(diameter.DefinitionPoint) + ToVector(diameter.AngleVertex)) / 2,
+                    Second = ToVector(diameter.AngleVertex),
+                    Location = ToVector(diameter.TextMiddlePoint),
+                },
+                AcadEntities.DimensionAngular3Pt angular => new DimensionEntity(layer, DimensionKind.Angular, style)
+                {
+                    Vertex = ToVector(angular.AngleVertex),
+                    First = ToVector(angular.FirstPoint),
+                    Second = ToVector(angular.SecondPoint),
+                    Location = ToVector(angular.DefinitionPoint),
+                },
+                _ => null,
+            };
+
+            if (result is null)
+            {
+                return null;
+            }
+
+            result.TextOverride = string.IsNullOrEmpty(source.Text) ? null : TextCodes.MTextToPlain(source.Text);
+            result.Graphics = graphics;
+            return result;
+        }
+
+        private DimensionStyle ConvertDimensionStyle(Acad.Tables.DimensionStyle? source)
+        {
+            if (source is null)
+            {
+                return Document.CurrentDimensionStyle;
+            }
+
+            var known = Document.DimensionStyles.Any(s => s.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase));
+            var style = Document.GetOrAddDimensionStyle(source.Name);
+            if (!known || source.Name == DimensionStyle.DefaultName)
+            {
+                style.TextHeight = source.TextHeight;
+                style.ArrowSize = source.ArrowSize;
+                style.ExtensionOffset = source.ExtensionLineOffset;
+                style.ExtensionExtend = source.ExtensionLineExtension;
+                style.TextGap = Math.Abs(source.DimensionLineGap);
+                style.Decimals = source.DecimalPlaces;
+                style.DecimalSeparator = source.DecimalSeparator == '\0' ? '.' : source.DecimalSeparator;
+                style.Scale = source.ScaleFactor > 0 ? source.ScaleFactor : 1;
+            }
+
+            return style;
         }
 
         private static HatchEntity? ConvertHatch(AcadEntities.Hatch hatch, Layer layer)

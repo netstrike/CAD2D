@@ -21,6 +21,7 @@ internal static class BuiltInCommands
         editor.RegisterCommand("RIPETI", Redo, "REDO");
         ModifyCommands.Register(editor);
         DraftingCommands.Register(editor);
+        AnnotationCommands.Register(editor);
     }
 
     private static async Task Line(Editor ed)

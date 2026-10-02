@@ -40,8 +40,14 @@ public class DxfImporterTests
         Assert.Single(model.OfType<EllipseEntity>());
         Assert.Single(model.OfType<PolylinePathEntity>());
         Assert.Equal(4, model.OfType<TextEntity>().Count());
-        // 4 fori + 2 quote, entrambi come inserimenti di blocco.
-        Assert.Equal(6, model.OfType<InsertEntity>().Count());
+        Assert.Equal(4, model.OfType<InsertEntity>().Count());
+
+        // Le quote diventano quote vere, con la grafica del file.
+        var dimensions = model.OfType<DimensionEntity>().ToList();
+        Assert.Equal(2, dimensions.Count);
+        Assert.All(dimensions, d => Assert.NotNull(d.Graphics));
+        Assert.Contains(dimensions, d => d.Kind == DimensionKind.Linear && Math.Abs(d.Measurement - 200) < 1e-9);
+        Assert.Contains(dimensions, d => d.Kind == DimensionKind.Linear && Math.Abs(d.Measurement - 120) < 1e-9);
     }
 
     [Fact]

@@ -83,6 +83,43 @@ public static class EntityGeometry
                 }
 
                 break;
+            case DimensionEntity { Graphics: null } dimension when depth < MaxDepth:
+                foreach (var part in dimension.Explode())
+                {
+                    foreach (var primitive in Decompose(part, depth + 1))
+                    {
+                        yield return primitive;
+                    }
+                }
+
+                break;
+            case DimensionEntity { Graphics: { } graphics } dimension when depth < MaxDepth:
+                foreach (var child in graphics.Entities)
+                {
+                    foreach (var primitive in Decompose(child.Transformed(dimension.GraphicsTransform), depth + 1))
+                    {
+                        yield return primitive;
+                    }
+                }
+
+                break;
+            case SolidEntity solid:
+                for (var i = 0; i < solid.Corners.Count; i++)
+                {
+                    yield return new SegmentPrimitive(new Segment2D(solid.Corners[i], solid.Corners[(i + 1) % solid.Corners.Count]));
+                }
+
+                break;
+            case HatchEntity hatch:
+                foreach (var loop in hatch.Loops)
+                {
+                    foreach (var primitive in Decompose(new PolylineEntity(hatch.Layer, loop, isClosed: true), depth + 1))
+                    {
+                        yield return primitive;
+                    }
+                }
+
+                break;
             case InsertEntity insert when depth < MaxDepth:
                 foreach (var child in insert.Block.Entities)
                 {

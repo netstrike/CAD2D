@@ -79,6 +79,12 @@ public sealed class Editor
     public bool SnapEnabled { get; set; } = true;
     public bool OrthoEnabled { get; set; }
 
+    /// <summary>Cresce a ogni nuova richiesta: la finestra lo usa per sapere quando proporre <see cref="SuggestedInput"/>.</summary>
+    public int PromptId { get; private set; }
+
+    /// <summary>Testo da precompilare nella riga di comando per la richiesta in corso (per esempio il testo da modificare).</summary>
+    public string? SuggestedInput { get; private set; }
+
     /// <summary>Testo da mostrare accanto alla riga di comando.</summary>
     public string Prompt { get; private set; } = IdlePrompt;
 
@@ -342,8 +348,8 @@ public sealed class Editor
         Ask(PromptKind.Number, prompt, null, null, keywords);
 
     /// <summary>Testo libero, spazi compresi. Invio a vuoto restituisce <see cref="PromptStatus.None"/>.</summary>
-    public Task<PromptResult> GetStringAsync(string prompt, Vector2? basePoint = null, Func<Vector2, IEnumerable<Entity>>? preview = null) =>
-        Ask(PromptKind.Text, prompt, basePoint, preview, []);
+    public Task<PromptResult> GetStringAsync(string prompt, string? initialText = null, Vector2? basePoint = null, Func<Vector2, IEnumerable<Entity>>? preview = null) =>
+        Ask(PromptKind.Text, prompt, basePoint, preview, [], initialText);
 
     /// <summary>
     /// Entità su cui operare: se c'è già una selezione si usa quella, altrimenti si selezionano con clic e finestre
@@ -371,8 +377,11 @@ public sealed class Editor
         return items;
     }
 
-    private Task<PromptResult> Ask(PromptKind kind, string prompt, Vector2? basePoint, Func<Vector2, IEnumerable<Entity>>? preview, IReadOnlyList<string> keywords)
+    private Task<PromptResult> Ask(
+        PromptKind kind, string prompt, Vector2? basePoint, Func<Vector2, IEnumerable<Entity>>? preview, IReadOnlyList<string> keywords, string? initialText = null)
     {
+        PromptId++;
+        SuggestedInput = initialText;
         _pending = new TaskCompletionSource<PromptResult>();
         _pendingKind = kind;
         _keywords = keywords;
@@ -549,6 +558,7 @@ public sealed class EditorSettings
     public double FilletRadius { get; set; }
     public double ChamferDistance1 { get; set; }
     public double ChamferDistance2 { get; set; }
+    public double TextHeight { get; set; } = 2.5;
     public string HatchPattern { get; set; } = "ANSI31";
     public double HatchScale { get; set; } = 1;
 

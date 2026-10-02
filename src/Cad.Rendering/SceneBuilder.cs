@@ -89,6 +89,12 @@ public static class SceneBuilder
                 return;
             }
 
+            if (entity is DimensionEntity dimension)
+            {
+                AddDimension(dimension, context, layer, color);
+                return;
+            }
+
             EntityCount++;
             var m = context.Transform;
             var dash = IgnoreLinetypes || linetype.IsContinuous
@@ -148,6 +154,32 @@ public static class SceneBuilder
             foreach (var attribute in insert.Attributes)
             {
                 Add(attribute, attributes);
+            }
+        }
+
+        /// <summary>Quota: la grafica letta dal file se c'è, altrimenti quella generata dai punti di definizione.</summary>
+        private void AddDimension(DimensionEntity dimension, Context context, Layer layer, CadColor color)
+        {
+            if (context.Depth >= MaxDepth)
+            {
+                return;
+            }
+
+            if (dimension.Graphics is { } graphics)
+            {
+                var inner = new Context(dimension.GraphicsTransform * context.Transform, layer, color, Linetype.Continuous, context.Depth + 1);
+                foreach (var child in graphics.Entities)
+                {
+                    Add(child, inner);
+                }
+
+                return;
+            }
+
+            var generated = new Context(context.Transform, layer, color, Linetype.Continuous, context.Depth + 1);
+            foreach (var part in dimension.Explode())
+            {
+                Add(part, generated);
             }
         }
 

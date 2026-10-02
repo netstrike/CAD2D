@@ -41,6 +41,22 @@
         <MenuItem Header="_Cerchio" Click="OnMenuCommand" Tag="CERCHIO" />
         <MenuItem Header="_Arco" Click="OnMenuCommand" Tag="ARCO" />
         <MenuItem Header="_Rettangolo" Click="OnMenuCommand" Tag="RETTANGOLO" />
+        <Separator />
+        <MenuItem Header="_Tratteggio" Click="OnMenuCommand" Tag="TRATTEGGIO" />
+      </MenuItem>
+      <MenuItem Header="_Testo">
+        <MenuItem Header="_Testo su una riga" Click="OnMenuCommand" Tag="TESTO" />
+        <MenuItem Header="Testo su _più righe" Click="OnMenuCommand" Tag="TESTOM" />
+        <MenuItem Header="_Modifica testo" Click="OnMenuCommand" Tag="MODIFICATESTO" />
+      </MenuItem>
+      <MenuItem Header="_Quota">
+        <MenuItem Header="_Lineare" Click="OnMenuCommand" Tag="QLINEARE" />
+        <MenuItem Header="_Allineata" Click="OnMenuCommand" Tag="QALLINEATA" />
+        <MenuItem Header="_Raggio" Click="OnMenuCommand" Tag="QRAGGIO" />
+        <MenuItem Header="_Diametro" Click="OnMenuCommand" Tag="QDIAMETRO" />
+        <MenuItem Header="A_ngolare" Click="OnMenuCommand" Tag="QANGOLARE" />
+        <Separator />
+        <MenuItem Header="_Stile di quota" Click="OnMenuCommand" Tag="STILEQUOTA" />
       </MenuItem>
       <MenuItem x:Name="SnapMenu" Header="_Snap" />
       <MenuItem Header="_Vista">
