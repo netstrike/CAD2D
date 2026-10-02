@@ -9,7 +9,10 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\Cad.IO\Cad.IO.csproj" />
     <ProjectReference Include="..\..\src\Cad.Rendering\Cad.Rendering.csproj" />
-    <ProjectReference Include="..\..\src\Cad.Document\Cad.Document.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\samples\demo.dxf" Link="samples\demo.dxf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

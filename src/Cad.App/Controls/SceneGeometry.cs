@@ -1,47 +1,61 @@
 using Cad.Geometry;
+using Cad.Rendering;
 using SkiaSharp;
 
 namespace Cad.App.Controls;
 
 /// <summary>
-/// Geometria della scena già convertita in un unico <see cref="SKPath"/> in coordinate mondo.
-/// Pan e zoom cambiano solo la matrice di disegno, quindi il percorso si costruisce una volta per scena.
+/// La scena convertita in un <see cref="SKPath"/> per colore. Le coordinate sono relative a <see cref="Origin"/>
+/// (il centro del disegno): in float, coordinate grandi come quelle UTM perderebbero precisione.
 /// </summary>
 internal sealed class SceneGeometry : IDisposable
 {
-    public static readonly SceneGeometry Empty = new(new SKPath(), BoundingBox.Empty, isShared: true);
-
-    private readonly bool _isShared;
-
-    private SceneGeometry(SKPath path, BoundingBox bounds, bool isShared = false)
+    private SceneGeometry(Scene scene, Vector2 origin, IReadOnlyList<(SKColor Color, SKPath Path)> paths)
     {
-        Path = path;
-        Bounds = bounds;
-        _isShared = isShared;
+        Scene = scene;
+        Origin = origin;
+        Paths = paths;
     }
 
-    public SKPath Path { get; }
-    public BoundingBox Bounds { get; }
+    public static SceneGeometry Empty { get; } = new(Scene.Empty, Vector2.Zero, []);
 
-    public static SceneGeometry Build(IReadOnlyList<Segment2D> segments)
+    public Scene Scene { get; }
+    public Vector2 Origin { get; }
+    public IReadOnlyList<(SKColor Color, SKPath Path)> Paths { get; }
+
+    public static SceneGeometry Build(Scene scene)
     {
-        var path = new SKPath();
-        var bounds = BoundingBox.Empty;
-        foreach (var s in segments)
+        var origin = scene.Bounds.IsEmpty ? Vector2.Zero : scene.Bounds.Center;
+        var paths = new List<(SKColor, SKPath)>(scene.Batches.Count);
+        foreach (var batch in scene.Batches)
         {
-            path.MoveTo((float)s.Start.X, (float)s.Start.Y);
-            path.LineTo((float)s.End.X, (float)s.End.Y);
-            bounds = bounds.Union(s.Bounds);
+            var path = new SKPath();
+            foreach (var polyline in batch.Polylines)
+            {
+                var first = polyline[0] - origin;
+                path.MoveTo((float)first.X, (float)first.Y);
+                for (var i = 1; i < polyline.Length; i++)
+                {
+                    var p = polyline[i] - origin;
+                    path.LineTo((float)p.X, (float)p.Y);
+                }
+            }
+
+            paths.Add((ToSkColor(batch.Color), path));
         }
 
-        return new SceneGeometry(path, bounds);
+        return new SceneGeometry(scene, origin, paths);
     }
+
+    /// <summary>Il nero puro è invisibile su fondo scuro: come negli altri CAD, si disegna bianco.</summary>
+    public static SKColor ToSkColor(Cad.Document.CadColor color) =>
+        color is { R: 0, G: 0, B: 0 } ? SKColors.White : new SKColor(color.R, color.G, color.B);
 
     public void Dispose()
     {
-        if (!_isShared)
+        foreach (var (_, path) in Paths)
         {
-            Path.Dispose();
+            path.Dispose();
         }
     }
 }

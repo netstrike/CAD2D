@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Cad.Document;
 using Cad.Geometry;
 using Cad.Rendering;
 
@@ -14,10 +15,9 @@ public sealed class CadCanvas : Control
 {
     private const double WheelZoomFactor = 1.2;
 
-    private IReadOnlyList<Segment2D> _scene = [];
+    private CadDocument? _document;
     private SceneGeometry _geometry = SceneGeometry.Empty;
     private Point? _panOrigin;
-    private bool _initialFitDone;
 
     public CadCanvas()
     {
@@ -26,45 +26,55 @@ public sealed class CadCanvas : Control
 
     public ViewTransform View { get; } = new();
 
-    public IReadOnlyList<Segment2D> Scene
+    public Scene Scene => _geometry.Scene;
+
+    public CadDocument? Document
     {
-        get => _scene;
+        get => _document;
         set
         {
-            _scene = value;
-            _geometry.Dispose();
-            _geometry = SceneGeometry.Build(value);
-            _initialFitDone = Bounds.Width > 0;
-            if (_initialFitDone)
-            {
-                ZoomExtents();
-            }
+            _document = value;
+            RefreshScene();
+            ZoomExtents();
         }
     }
 
     public event EventHandler<Vector2>? CursorWorldPositionChanged;
     public event EventHandler? ViewChanged;
 
+    /// <summary>Ricostruisce la scena dopo una modifica al documento o alla visibilità dei layer, senza cambiare la vista.</summary>
+    public void RefreshScene()
+    {
+        var old = _geometry;
+        _geometry = _document is null ? SceneGeometry.Empty : SceneGeometry.Build(SceneBuilder.Build(_document));
+        if (!ReferenceEquals(old, SceneGeometry.Empty))
+        {
+            old.Dispose();
+        }
+
+        OnViewChanged();
+    }
+
     public void ZoomExtents()
     {
-        View.ZoomExtents(_geometry.Bounds);
+        View.ZoomExtents(_geometry.Scene.Bounds);
         OnViewChanged();
     }
 
     public override void Render(DrawingContext context)
     {
         // Render non deve modificare altri controlli: la vista si aggiorna solo in OnSizeChanged e negli handler di input.
-        context.Custom(new SceneDrawOperation(new Rect(Bounds.Size), _geometry, View.WorldToScreenMatrix));
+        context.Custom(new SceneDrawOperation(new Rect(Bounds.Size), _geometry, View.WorldToScreenMatrix, View.VisibleWorldBounds));
     }
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
         base.OnSizeChanged(e);
+        var firstLayout = e.PreviousSize.Width <= 0 || e.PreviousSize.Height <= 0;
         View.SetViewport(e.NewSize.Width, e.NewSize.Height);
-        if (!_initialFitDone)
+        if (firstLayout)
         {
-            _initialFitDone = true;
-            View.ZoomExtents(_geometry.Bounds);
+            View.ZoomExtents(_geometry.Scene.Bounds);
         }
 
         OnViewChanged();
@@ -73,6 +83,7 @@ public sealed class CadCanvas : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        Focus();
         var point = e.GetCurrentPoint(this);
         if (!point.Properties.IsMiddleButtonPressed)
         {
@@ -128,18 +139,11 @@ public sealed class CadCanvas : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key == Key.F)
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.None)
         {
             ZoomExtents();
             e.Handled = true;
         }
-    }
-
-    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnDetachedFromVisualTree(e);
-        _geometry.Dispose();
-        _geometry = SceneGeometry.Empty;
     }
 
     private void OnViewChanged()

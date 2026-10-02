@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cad.IO\Cad.IO.csproj" />
+    <ProjectReference Include="..\..\src\Cad.Rendering\Cad.Rendering.csproj" />
+  </ItemGroup>
+</Project>

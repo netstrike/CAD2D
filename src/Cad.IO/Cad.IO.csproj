@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <ProjectReference Include="..\Cad.Geometry\Cad.Geometry.csproj" />
+    <PackageReference Include="ACadSharp" Version="3.8.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Cad.Document\Cad.Document.csproj" />
   </ItemGroup>
 </Project>

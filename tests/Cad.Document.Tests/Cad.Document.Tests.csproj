@@ -9,7 +9,6 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
-    <ProjectReference Include="..\..\src\Cad.Rendering\Cad.Rendering.csproj" />
     <ProjectReference Include="..\..\src\Cad.Document\Cad.Document.csproj" />
   </ItemGroup>
 </Project>

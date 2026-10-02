@@ -1,18 +1,48 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:Cad.App.Controls"
+        xmlns:app="using:Cad.App"
         x:Class="Cad.App.MainWindow"
         Title="CAD2D"
-        Width="1280" Height="800">
+        Width="1280" Height="800"
+        DragDrop.AllowDrop="True">
   <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="_Apri..." InputGesture="Ctrl+O" Click="OnOpenClick" />
+        <Separator />
+        <MenuItem Header="_Esci" Click="OnExitClick" />
+      </MenuItem>
+      <MenuItem Header="_Vista">
+        <MenuItem Header="Zoom _estensioni" InputGesture="F" Click="OnZoomExtentsClick" />
+      </MenuItem>
+    </Menu>
+
     <Border DockPanel.Dock="Bottom" Background="#1E1E1E" Padding="8,4">
       <Grid ColumnDefinitions="*,Auto,Auto">
-        <TextBlock x:Name="HintText" Grid.Column="0" Foreground="#A0A0A0"
-                   Text="Rotella: zoom · Tasto centrale trascinato: pan · Doppio clic centrale o F: zoom estensioni" />
+        <TextBlock x:Name="StatusText" Grid.Column="0" Foreground="#A0A0A0" TextTrimming="CharacterEllipsis" />
         <TextBlock x:Name="ScaleText" Grid.Column="1" Margin="24,0" Foreground="#A0A0A0" />
         <TextBlock x:Name="CoordinatesText" Grid.Column="2" FontFamily="Consolas,monospace" />
       </Grid>
     </Border>
+
+    <Border DockPanel.Dock="Left" Width="220" Background="#2B2B2B" BorderBrush="#3C3C3C" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Layer" FontWeight="SemiBold" Margin="10,8" />
+        <ListBox x:Name="LayerList" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="app:LayerItem">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <CheckBox IsChecked="{Binding IsOn}" MinWidth="0" Padding="0" ToolTip.Tip="Acceso/spento" />
+                <Rectangle Width="12" Height="12" Fill="{Binding ColorBrush}" Stroke="#808080" StrokeThickness="1" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
     <controls:CadCanvas x:Name="Canvas" Focusable="True" />
   </DockPanel>
 </Window>

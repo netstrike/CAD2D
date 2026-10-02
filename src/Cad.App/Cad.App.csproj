@@ -13,6 +13,11 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Cad.Geometry\Cad.Geometry.csproj" />
+    <ProjectReference Include="..\Cad.Document\Cad.Document.csproj" />
+    <ProjectReference Include="..\Cad.IO\Cad.IO.csproj" />
     <ProjectReference Include="..\Cad.Rendering\Cad.Rendering.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\samples\demo.dxf" Link="samples\demo.dxf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
