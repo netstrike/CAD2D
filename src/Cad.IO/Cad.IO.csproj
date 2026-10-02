@@ -5,4 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Cad.Document\Cad.Document.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cad.IO.Tests" />
+  </ItemGroup>
 </Project>

@@ -15,6 +15,12 @@ public abstract class Entity
     /// </summary>
     public object? SourceTag { get; set; }
 
+    /// <summary>
+    /// Se l'entità è un originale letto da file spostato, ruotato o specchiato: l'originale e la trasformazione.
+    /// Il salvataggio può così trasformare l'oggetto originale e conservarne tutte le proprietà.
+    /// </summary>
+    public SourceTransform? DerivedFrom { get; private set; }
+
     /// <summary>Ingombro in coordinate del contenitore (modello o blocco).</summary>
     public abstract BoundingBox Bounds { get; }
 
@@ -27,6 +33,9 @@ public abstract class Entity
         var result = TransformCore(m);
         result.Layer = Layer;
         result.Color = Color;
+        result.DerivedFrom = SourceTag is not null
+            ? new SourceTransform(SourceTag, m)
+            : DerivedFrom is { } d ? d with { Transform = d.Transform * m } : null;
         return result;
     }
 
@@ -51,6 +60,9 @@ public abstract class Entity
     /// <summary>Nuova direzione di un angolo dopo la trasformazione.</summary>
     protected static double TransformAngle(Matrix2D m, double angle) => m.TransformVector(Vector2.FromPolar(1, angle)).Angle;
 }
+
+/// <summary>Oggetto originale e trasformazione da applicargli per ottenere l'entità attuale.</summary>
+public readonly record struct SourceTransform(object Source, Matrix2D Transform);
 
 public sealed class LineEntity(Layer layer, Vector2 start, Vector2 end) : Entity(layer)
 {

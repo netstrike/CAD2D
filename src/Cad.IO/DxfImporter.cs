@@ -6,6 +6,17 @@ using AcadEntities = ACadSharp.Entities;
 
 namespace Cad.IO;
 
+/// <summary>
+/// Il documento ACadSharp letto dal file e l'elenco delle sue entità di modello convertite.
+/// Le entità non convertite (tipi non gestiti) restano nel documento e vengono riscritte intatte al salvataggio.
+/// </summary>
+public sealed class DxfSource(Acad.CadDocument document)
+{
+    public Acad.CadDocument Document { get; } = document;
+
+    public HashSet<object> ConvertedEntities { get; } = new(ReferenceEqualityComparer.Instance);
+}
+
 /// <summary>Risultato di un'importazione: il documento e gli errori segnalati dal lettore (parti del file saltate).</summary>
 public sealed record ImportResult(CadDocument Document, IReadOnlyList<string> Errors);
 
@@ -25,7 +36,9 @@ public static class DxfImporter
     public static ImportResult Load(string path)
     {
         using var stream = File.OpenRead(path);
-        return Load(stream);
+        var result = Load(stream);
+        result.Document.FilePath = path;
+        return result;
     }
 
     public static ImportResult Load(Stream stream)
@@ -45,11 +58,16 @@ public static class DxfImporter
 
     public static CadDocument Convert(Acad.CadDocument source)
     {
-        var converter = new Converter(new CadDocument());
+        var dxfSource = new DxfSource(source);
+        var converter = new Converter(new CadDocument { Source = dxfSource });
         converter.ConvertLayers(source);
         foreach (var entity in source.Entities)
         {
-            converter.Add(entity, converter.Document.ModelSpace, depth: 0);
+            if (converter.Add(entity, converter.Document.ModelSpace, depth: 0) is { } converted)
+            {
+                converted.SourceTag = entity;
+                dxfSource.ConvertedEntities.Add(entity);
+            }
         }
 
         return converter.Document;
@@ -73,22 +91,23 @@ public static class DxfImporter
             }
         }
 
-        public void Add(AcadEntities.Entity source, List<Entity> target, int depth)
+        public Entity? Add(AcadEntities.Entity source, List<Entity> target, int depth)
         {
             if (source.IsInvisible)
             {
-                return;
+                return null;
             }
 
             var converted = ConvertEntity(source, depth);
             if (converted is null)
             {
                 Document.AddUnsupported(source.ObjectName);
-                return;
+                return null;
             }
 
             converted.Color = ToEntityColor(source.Color);
             target.Add(converted);
+            return converted;
         }
 
         private Entity? ConvertEntity(AcadEntities.Entity source, int depth)
