@@ -62,8 +62,13 @@ public static class DxfExporter
                 : null;
             if (written is not null)
             {
-                // La copia trasformata tiene colore e proprietà dell'originale; il layer può essere cambiato.
+                // La copia trasformata tiene le proprietà dell'originale; layer e colore possono essere cambiati
+                // (per esempio esplodendo un blocco, dove "0" e DaBlocco prendono i valori dell'inserimento).
                 written.Layer = layers[entity.Layer.Name];
+                if (!SameColor(written.Color, entity.Color))
+                {
+                    written.Color = ToAcadColor(entity.Color);
+                }
             }
             else
             {
@@ -268,6 +273,15 @@ public static class DxfExporter
         ColorSource.ByBlock => Acad.Color.ByBlock,
         ColorSource.Explicit => ToAcadColor(color.Value),
         _ => Acad.Color.ByLayer,
+    };
+
+    /// <summary>Confronto che non riscrive un indice ACI con un equivalente (7 e 255 sono entrambi bianchi).</summary>
+    private static bool SameColor(Acad.Color acad, EntityColor color) => color.Source switch
+    {
+        ColorSource.ByLayer => acad.IsByLayer,
+        ColorSource.ByBlock => acad.IsByBlock,
+        _ => !acad.IsByLayer && !acad.IsByBlock && acad.GetRgb() is { Length: >= 3 } v &&
+             v[0] == color.Value.R && v[1] == color.Value.G && v[2] == color.Value.B,
     };
 
     /// <summary>Usa l'indice ACI se il colore ne ha uno identico, altrimenti il colore RGB.</summary>

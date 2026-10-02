@@ -284,6 +284,22 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
                 }
 
                 break;
+            case SnapModes.Tangent:
+                canvas.DrawCircle(x, y, s * 0.8f, paint);
+                canvas.DrawLine(x - s, y - s, x + s, y - s, paint);
+                break;
+            case SnapModes.Nearest:
+                using (var hourglass = new SKPath())
+                {
+                    hourglass.MoveTo(x - s, y - s);
+                    hourglass.LineTo(x + s, y - s);
+                    hourglass.LineTo(x - s, y + s);
+                    hourglass.LineTo(x + s, y + s);
+                    hourglass.Close();
+                    canvas.DrawPath(hourglass, paint);
+                }
+
+                break;
             default:
                 canvas.DrawCircle(x, y, s, paint);
                 canvas.DrawLine(x - s, y - s, x + s, y + s, paint);

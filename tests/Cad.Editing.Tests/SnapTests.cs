@@ -75,3 +75,35 @@ public class SnapTests
         Assert.Null(SnapEngine.Find([arc, line], new Vector2(4, -3), 0.5, SnapModes.Intersection));
     }
 }
+
+public class SnapTangentNearestTests
+{
+    private readonly Layer _layer = new("0");
+
+    [Fact]
+    public void Tangent_from_external_point()
+    {
+        var circle = new CircleEntity(_layer, Vector2.Zero, 5);
+        // Da (10, 0) le tangenti toccano il cerchio a 60° e -60°.
+        var expected = Vector2.FromPolar(5, Math.PI / 3);
+        var snap = SnapEngine.Find([circle], expected + new Vector2(0.1, 0.1), 0.5, SnapModes.Tangent, new Vector2(10, 0));
+        Assert.Equal(SnapModes.Tangent, snap?.Kind);
+        Assert.True(snap!.Value.Point.IsAlmostEqual(expected, 1e-9));
+    }
+
+    [Fact]
+    public void Nearest_projects_on_the_line()
+    {
+        var line = new LineEntity(_layer, Vector2.Zero, new Vector2(10, 0));
+        var snap = SnapEngine.Find([line], new Vector2(3.3, 0.2), 0.5, SnapModes.Nearest);
+        Assert.True(snap?.Point.IsAlmostEqual(new Vector2(3.3, 0), 1e-12));
+    }
+
+    [Fact]
+    public void Endpoint_wins_over_nearest()
+    {
+        var line = new LineEntity(_layer, Vector2.Zero, new Vector2(10, 0));
+        var snap = SnapEngine.Find([line], new Vector2(0.2, 0.1), 0.5, SnapModes.Nearest | SnapModes.Endpoint);
+        Assert.Equal(SnapModes.Endpoint, snap?.Kind);
+    }
+}

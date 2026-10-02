@@ -24,6 +24,16 @@
         <MenuItem Header="_Copia" Click="OnMenuCommand" Tag="COPIA" />
         <MenuItem Header="_Ruota" Click="OnMenuCommand" Tag="RUOTA" />
         <MenuItem Header="Ca_ncella" InputGesture="Delete" Click="OnMenuCommand" Tag="CANCELLA" />
+        <Separator />
+        <MenuItem Header="Spe_cchia" Click="OnMenuCommand" Tag="SPECCHIA" />
+        <MenuItem Header="Sca_la" Click="OnMenuCommand" Tag="SCALA" />
+        <MenuItem Header="_Offset" Click="OnMenuCommand" Tag="OFFSET" />
+        <MenuItem Header="_Taglia" Click="OnMenuCommand" Tag="TAGLIA" />
+        <MenuItem Header="_Estendi" Click="OnMenuCommand" Tag="ESTENDI" />
+        <MenuItem Header="Ra_ccorda" Click="OnMenuCommand" Tag="RACCORDA" />
+        <MenuItem Header="C_ima" Click="OnMenuCommand" Tag="CIMA" />
+        <MenuItem Header="Ser_ie" Click="OnMenuCommand" Tag="SERIE" />
+        <MenuItem Header="Es_plodi" Click="OnMenuCommand" Tag="ESPLODI" />
       </MenuItem>
       <MenuItem Header="_Disegna">
         <MenuItem Header="_Linea" Click="OnMenuCommand" Tag="LINEA" />
@@ -32,6 +42,7 @@
         <MenuItem Header="_Arco" Click="OnMenuCommand" Tag="ARCO" />
         <MenuItem Header="_Rettangolo" Click="OnMenuCommand" Tag="RETTANGOLO" />
       </MenuItem>
+      <MenuItem x:Name="SnapMenu" Header="_Snap" />
       <MenuItem Header="_Vista">
         <MenuItem Header="Zoom _estensioni" Click="OnZoomExtentsClick" />
         <MenuItem Header="Zoom _finestra" Click="OnMenuCommand" Tag="ZOOM" />

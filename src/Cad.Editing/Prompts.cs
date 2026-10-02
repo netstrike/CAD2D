@@ -1,4 +1,5 @@
 using System.Globalization;
+using Cad.Document;
 using Cad.Geometry;
 
 namespace Cad.Editing;
@@ -18,7 +19,8 @@ public enum PromptStatus
     Cancel,
 }
 
-public readonly record struct PromptResult(PromptStatus Status, Vector2 Point = default, double Value = 0, string? Keyword = null)
+public readonly record struct PromptResult(
+    PromptStatus Status, Vector2 Point = default, double Value = 0, string? Keyword = null, Entity? Entity = null, string? Text = null)
 {
     public bool IsOk => Status == PromptStatus.Ok;
 
@@ -32,6 +34,18 @@ internal enum PromptKind
     Distance,
     Angle,
     Selection,
+
+    /// <summary>Un'entità indicata con un clic (per TAGLIA, OFFSET, RACCORDA...).</summary>
+    Entity,
+
+    /// <summary>Un numero scritto.</summary>
+    Number,
+
+    /// <summary>Solo una delle opzioni elencate.</summary>
+    Keyword,
+
+    /// <summary>Testo libero: gli spazi fanno parte del valore.</summary>
+    Text,
 }
 
 /// <summary>Interpretazione di ciò che si scrive sulla riga di comando.</summary>
@@ -91,7 +105,10 @@ public static class InputParser
             return null;
         }
 
-        return keywords.FirstOrDefault(k => k.Equals(s, StringComparison.OrdinalIgnoreCase))
-               ?? keywords.FirstOrDefault(k => k.StartsWith(s, StringComparison.OrdinalIgnoreCase));
+        // Accenti ignorati: "si" sceglie "Sì".
+        var compare = CultureInfo.InvariantCulture.CompareInfo;
+        const CompareOptions options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace;
+        return keywords.FirstOrDefault(k => compare.Compare(k, s, options) == 0)
+               ?? keywords.FirstOrDefault(k => compare.IsPrefix(k, s, options));
     }
 }

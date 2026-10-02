@@ -98,6 +98,9 @@ public sealed class EntityLocator
     public IEnumerable<Entity> Near(Vector2 point, double radius) =>
         Index.Query(new BoundingBox(point - new Vector2(radius, radius), point + new Vector2(radius, radius)));
 
+    /// <summary>Entità selezionabili il cui ingombro tocca il rettangolo.</summary>
+    public IEnumerable<Entity> Overlapping(BoundingBox box) => Index.Query(box);
+
     /// <summary>L'entità più vicina al punto entro il raggio, o null.</summary>
     public Entity? Pick(Vector2 point, double radius) => Near(point, radius)
         .Select(e => (Entity: e, Distance: EntityGeometry.DistanceTo(e, point)))

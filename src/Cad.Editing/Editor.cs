@@ -19,6 +19,7 @@ public sealed class Editor
     private Func<Vector2, IEnumerable<Entity>>? _preview;
     private string? _lastCommand;
     private int _runId;
+    private double _aperture = 1;
 
     public Editor(CadDocument document)
     {
@@ -33,6 +34,9 @@ public sealed class Editor
     public SelectionSet Selection { get; } = new();
     public EntityLocator Locator { get; }
     public Layer CurrentLayer { get; set; }
+
+    /// <summary>Valori ricordati tra un comando e l'altro (distanza di offset, raggio di raccordo...).</summary>
+    public EditorSettings Settings { get; } = new();
 
     public SnapModes SnapModes { get; set; } = SnapModes.Default;
     public bool SnapEnabled { get; set; } = true;
@@ -57,6 +61,15 @@ public sealed class Editor
 
     /// <summary>Vero quando un clic deve selezionare entità (nessun comando, o comando che chiede oggetti).</summary>
     public bool IsSelecting => _pending is null || _pendingKind == PromptKind.Selection;
+
+    /// <summary>Vero quando si sta scrivendo un testo libero: la barra spaziatrice inserisce uno spazio invece di confermare.</summary>
+    public bool AcceptsSpaces => _pending is not null && _pendingKind == PromptKind.Text;
+
+    /// <summary>Vero quando un clic deve indicare un'entità (il cursore non usa snap né ortho).</summary>
+    public bool IsPickingEntity => _pending is not null && _pendingKind == PromptKind.Entity;
+
+    /// <summary>Raggio di cattura usato per l'ultimo movimento del mouse, in unità di disegno.</summary>
+    public double Aperture => _aperture;
 
     /// <summary>Righe da aggiungere allo storico della riga di comando.</summary>
     public event Action<string>? Message;
@@ -84,6 +97,7 @@ public sealed class Editor
     /// <summary>Movimento del mouse: aggiorna snap, ortho e anteprime. <paramref name="aperture"/> è il raggio di cattura in unità di disegno.</summary>
     public void Hover(Vector2 world, double aperture)
     {
+        _aperture = aperture;
         Cursor = ResolvePoint(world, aperture, out var snap);
         CurrentSnap = snap;
         StateChanged?.Invoke(this, EventArgs.Empty);
@@ -92,6 +106,26 @@ public sealed class Editor
     /// <summary>Clic sinistro: un punto se il comando ne chiede uno, altrimenti selezione.</summary>
     public void Click(Vector2 world, double aperture, bool removeFromSelection = false)
     {
+        _aperture = aperture;
+        if (IsPickingEntity)
+        {
+            if (Locator.Pick(world, aperture) is { } picked)
+            {
+                CompletePending(new PromptResult(PromptStatus.Ok, world, Entity: picked));
+            }
+            else
+            {
+                Write("Nessun oggetto in quel punto.");
+            }
+
+            return;
+        }
+
+        if (_pendingKind is PromptKind.Number or PromptKind.Text or PromptKind.Keyword && _pending is not null)
+        {
+            return;
+        }
+
         if (!IsSelecting)
         {
             var point = ResolvePoint(world, aperture, out _);
@@ -141,6 +175,12 @@ public sealed class Editor
             }
 
             RunCommand(trimmed);
+            return;
+        }
+
+        if (_pendingKind == PromptKind.Text)
+        {
+            CompletePending(text.Length == 0 ? PromptResult.Empty : new PromptResult(PromptStatus.Ok, Text: text));
             return;
         }
 
@@ -251,6 +291,22 @@ public sealed class Editor
     /// <summary>Angolo scritto in gradi, oppure indicato con un punto (direzione dal punto base). Il risultato è in radianti.</summary>
     public Task<PromptResult> GetAngleAsync(string prompt, Vector2 basePoint, Func<Vector2, IEnumerable<Entity>>? preview = null, params string[] keywords) =>
         Ask(PromptKind.Angle, prompt, basePoint, preview, keywords);
+
+    /// <summary>Un'entità indicata con un clic. Il risultato porta l'entità e il punto cliccato.</summary>
+    public Task<PromptResult> GetEntityAsync(string prompt, params string[] keywords) =>
+        Ask(PromptKind.Entity, prompt, null, null, keywords);
+
+    /// <summary>Una delle opzioni elencate; Invio a vuoto restituisce <see cref="PromptStatus.None"/> (l'opzione predefinita).</summary>
+    public Task<PromptResult> GetKeywordAsync(string prompt, params string[] keywords) =>
+        Ask(PromptKind.Keyword, prompt, null, null, keywords);
+
+    /// <summary>Un numero scritto sulla riga di comando.</summary>
+    public Task<PromptResult> GetNumberAsync(string prompt, params string[] keywords) =>
+        Ask(PromptKind.Number, prompt, null, null, keywords);
+
+    /// <summary>Testo libero, spazi compresi. Invio a vuoto restituisce <see cref="PromptStatus.None"/>.</summary>
+    public Task<PromptResult> GetStringAsync(string prompt, Vector2? basePoint = null, Func<Vector2, IEnumerable<Entity>>? preview = null) =>
+        Ask(PromptKind.Text, prompt, basePoint, preview, []);
 
     /// <summary>
     /// Entità su cui operare: se c'è già una selezione si usa quella, altrimenti si selezionano con clic e finestre
@@ -363,6 +419,15 @@ public sealed class Editor
 
                 return false;
 
+            case PromptKind.Number:
+                if (InputParser.TryParseNumber(text, out var number))
+                {
+                    result = new PromptResult(PromptStatus.Ok, Value: number);
+                    return true;
+                }
+
+                return false;
+
             default:
                 return false;
         }
@@ -372,7 +437,7 @@ public sealed class Editor
     public Vector2 ResolvePoint(Vector2 world, double aperture, out SnapResult? snap)
     {
         snap = null;
-        if (_pending is null || _pendingKind == PromptKind.Selection)
+        if (_pending is null || _pendingKind is PromptKind.Selection or PromptKind.Entity)
         {
             return world;
         }
@@ -438,4 +503,13 @@ public sealed class Editor
     internal static string Format(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
     private sealed record CommandInfo(string Name, Func<Editor, Task> Run);
+}
+
+/// <summary>Valori dei comandi che restano tra un uso e l'altro, come in DraftSight.</summary>
+public sealed class EditorSettings
+{
+    public double OffsetDistance { get; set; } = 10;
+    public double FilletRadius { get; set; }
+    public double ChamferDistance1 { get; set; }
+    public double ChamferDistance2 { get; set; }
 }

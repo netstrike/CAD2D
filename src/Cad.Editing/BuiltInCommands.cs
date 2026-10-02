@@ -19,6 +19,7 @@ internal static class BuiltInCommands
         editor.RegisterCommand("CANCELLA", Erase, "E", "ERASE", "CANC");
         editor.RegisterCommand("ANNULLA", Undo, "U", "UNDO");
         editor.RegisterCommand("RIPETI", Redo, "REDO");
+        ModifyCommands.Register(editor);
     }
 
     private static async Task Line(Editor ed)

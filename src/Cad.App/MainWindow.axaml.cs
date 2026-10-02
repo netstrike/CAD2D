@@ -61,6 +61,47 @@ public partial class MainWindow : Window
         };
 
         AddHandler(DragDrop.DropEvent, OnDrop);
+        BuildSnapMenu();
+    }
+
+    private static readonly (SnapModes Mode, string Label)[] SnapItems =
+    [
+        (SnapModes.Endpoint, "_Estremo"),
+        (SnapModes.Midpoint, "_Medio"),
+        (SnapModes.Center, "_Centro"),
+        (SnapModes.Quadrant, "_Quadrante"),
+        (SnapModes.Intersection, "_Intersezione"),
+        (SnapModes.Perpendicular, "_Perpendicolare"),
+        (SnapModes.Tangent, "_Tangente"),
+        (SnapModes.Node, "_Nodo"),
+        (SnapModes.Nearest, "_Vicino"),
+    ];
+
+    private SnapModes _snapModes = SnapModes.Default;
+
+    /// <summary>Una voce spuntabile per ogni tipo di snap; la scelta vale anche per i disegni aperti dopo.</summary>
+    private void BuildSnapMenu()
+    {
+        var items = new List<MenuItem>();
+        foreach (var (mode, label) in SnapItems)
+        {
+            var item = new MenuItem { Header = label, ToggleType = MenuItemToggleType.CheckBox, IsChecked = _snapModes.HasFlag(mode) };
+            item.Click += (_, _) =>
+            {
+                // Lo stato si ricava dalla maschera: non dipende da quando il menu aggiorna la spunta.
+                _snapModes ^= mode;
+                item.IsChecked = _snapModes.HasFlag(mode);
+                if (_editor is not null)
+                {
+                    _editor.SnapModes = _snapModes;
+                }
+
+                CommandBox.Focus();
+            };
+            items.Add(item);
+        }
+
+        SnapMenu.ItemsSource = items;
     }
 
     protected override async void OnLoaded(RoutedEventArgs e)
@@ -114,6 +155,7 @@ public partial class MainWindow : Window
         {
             SnapEnabled = SnapToggle.IsChecked == true,
             OrthoEnabled = OrthoToggle.IsChecked == true,
+            SnapModes = _snapModes,
         };
         RegisterUiCommands(editor);
         editor.Message += AppendHistory;
@@ -396,7 +438,7 @@ public partial class MainWindow : Window
         }
 
         var text = CommandBox.Text ?? "";
-        if (e.Key is Key.Enter or Key.Space)
+        if (e.Key == Key.Enter || (e.Key == Key.Space && !_editor.AcceptsSpaces))
         {
             CommandBox.Text = "";
             _editor.SubmitText(text);

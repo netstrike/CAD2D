@@ -14,7 +14,9 @@ public enum SnapModes
     Perpendicular = 16,
     Quadrant = 32,
     Node = 64,
-    Default = Endpoint | Midpoint | Center | Intersection | Perpendicular | Node,
+    Tangent = 128,
+    Nearest = 256,
+    Default = Endpoint | Midpoint | Center | Intersection | Perpendicular | Node | Quadrant | Tangent,
 }
 
 public readonly record struct SnapResult(Vector2 Point, SnapModes Kind);
@@ -28,7 +30,7 @@ public static class SnapEngine
     private static readonly SnapModes[] Priority =
     [
         SnapModes.Endpoint, SnapModes.Node, SnapModes.Center, SnapModes.Midpoint,
-        SnapModes.Quadrant, SnapModes.Intersection, SnapModes.Perpendicular,
+        SnapModes.Quadrant, SnapModes.Intersection, SnapModes.Perpendicular, SnapModes.Tangent, SnapModes.Nearest,
     ];
 
     /// <param name="candidates">Entità vicine al cursore (già filtrate con l'indice spaziale).</param>
@@ -45,6 +47,10 @@ public static class SnapEngine
         var primitives = new List<Primitive>();
         var best = (SnapResult?)null;
         var bestDistance = double.PositiveInfinity;
+
+        // "Vicino" vale solo se non c'è nessun punto notevole: altrimenti vincerebbe sempre.
+        Vector2? nearest = null;
+        var nearestDistance = double.PositiveInfinity;
 
         void Consider(Vector2 point, SnapModes kind)
         {
@@ -95,6 +101,16 @@ public static class SnapEngine
                 }
 
                 primitives.Add(primitive);
+                if ((modes & SnapModes.Nearest) != 0)
+                {
+                    var near = Nearest(primitive, cursor);
+                    if (Vector2.Distance(near, cursor) < nearestDistance)
+                    {
+                        nearestDistance = Vector2.Distance(near, cursor);
+                        nearest = near;
+                    }
+                }
+
                 switch (primitive)
                 {
                     case SegmentPrimitive { Segment: var s }:
@@ -127,6 +143,14 @@ public static class SnapEngine
                             if (arc.ContainsAngle(q * Math.PI / 2))
                             {
                                 Consider(arc.Center + Vector2.FromPolar(arc.Radius, q * Math.PI / 2), SnapModes.Quadrant);
+                            }
+                        }
+
+                        if (basePoint is { } tangentFrom && (modes & SnapModes.Tangent) != 0)
+                        {
+                            foreach (var point in TangentPoints(arc, tangentFrom))
+                            {
+                                Consider(point, SnapModes.Tangent);
                             }
                         }
 
@@ -172,7 +196,50 @@ public static class SnapEngine
             }
         }
 
+        if (best is null && nearest is { } fallback)
+        {
+            best = new SnapResult(fallback, SnapModes.Nearest);
+        }
+
         return best;
+    }
+
+    /// <summary>Punti di tangenza sull'arco delle rette che passano per <paramref name="from"/>.</summary>
+    private static IEnumerable<Vector2> TangentPoints(Arc2D arc, Vector2 from)
+    {
+        var d = Vector2.Distance(from, arc.Center);
+        if (d <= arc.Radius + Tolerance.Default)
+        {
+            yield break;
+        }
+
+        var toFrom = (from - arc.Center).Angle;
+        var spread = Math.Acos(arc.Radius / d);
+        foreach (var angle in new[] { toFrom + spread, toFrom - spread })
+        {
+            if (arc.ContainsAngle(angle))
+            {
+                yield return arc.Center + Vector2.FromPolar(arc.Radius, angle);
+            }
+        }
+    }
+
+    /// <summary>Punto della primitiva più vicino al cursore.</summary>
+    private static Vector2 Nearest(Primitive primitive, Vector2 cursor)
+    {
+        if (primitive is SegmentPrimitive s)
+        {
+            return s.Segment.ClosestPoint(cursor);
+        }
+
+        var arc = ((ArcPrimitive)primitive).Arc;
+        var angle = (cursor - arc.Center).Angle;
+        if (arc.ContainsAngle(angle))
+        {
+            return arc.Center + Vector2.FromPolar(arc.Radius, angle);
+        }
+
+        return Vector2.Distance(cursor, arc.StartPoint) <= Vector2.Distance(cursor, arc.EndPoint) ? arc.StartPoint : arc.EndPoint;
     }
 
     public static IReadOnlyList<Vector2> Intersect(Primitive a, Primitive b) => (a, b) switch
