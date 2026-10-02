@@ -231,7 +231,7 @@ public static class Patterns
 
             var counterClockwise = SignedArea(ring) > 0;
             var wantCounterClockwise = depth % 2 == 0;
-            result.Add(counterClockwise == wantCounterClockwise ? ring : [.. ring.Reverse()]);
+            result.Add(counterClockwise == wantCounterClockwise ? ring : [.. Enumerable.Reverse(ring)]);
         }
 
         return result;
