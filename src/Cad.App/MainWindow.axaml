@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Cad.App.Controls"
+        x:Class="Cad.App.MainWindow"
+        Title="CAD2D"
+        Width="1280" Height="800">
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Background="#1E1E1E" Padding="8,4">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock x:Name="HintText" Grid.Column="0" Foreground="#A0A0A0"
+                   Text="Rotella: zoom · Tasto centrale trascinato: pan · Doppio clic centrale o F: zoom estensioni" />
+        <TextBlock x:Name="ScaleText" Grid.Column="1" Margin="24,0" Foreground="#A0A0A0" />
+        <TextBlock x:Name="CoordinatesText" Grid.Column="2" FontFamily="Consolas,monospace" />
+      </Grid>
+    </Border>
+    <controls:CadCanvas x:Name="Canvas" Focusable="True" />
+  </DockPanel>
+</Window>
