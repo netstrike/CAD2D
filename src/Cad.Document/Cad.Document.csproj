@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Cad.Geometry\Cad.Geometry.csproj" />
+  </ItemGroup>
+</Project>

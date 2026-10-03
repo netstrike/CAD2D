@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="ACadSharp" Version="3.8.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Cad.Document\Cad.Document.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cad.IO.Tests" />
+  </ItemGroup>
+</Project>

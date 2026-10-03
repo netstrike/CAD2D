@@ -1,0 +1,738 @@
+using ACadSharp.IO;
+using Cad.Document;
+using Cad.Geometry;
+using Acad = ACadSharp;
+using AcadEntities = ACadSharp.Entities;
+
+namespace Cad.IO;
+
+/// <summary>
+/// Il documento ACadSharp letto dal file e l'elenco delle sue entità di modello convertite.
+/// Le entità non convertite (tipi non gestiti) restano nel documento e vengono riscritte intatte al salvataggio.
+/// </summary>
+public sealed class DxfSource(Acad.CadDocument document)
+{
+    public Acad.CadDocument Document { get; } = document;
+
+    public HashSet<object> ConvertedEntities { get; } = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Versione del DWG da cui è stato letto il disegno; null se viene da un DXF o è nuovo.</summary>
+    public Acad.ACadVersion? DwgVersion { get; set; }
+}
+
+/// <summary>Risultato di un'importazione: il documento e gli errori segnalati dal lettore (parti del file saltate).</summary>
+public sealed record ImportResult(CadDocument Document, IReadOnlyList<string> Errors);
+
+/// <summary>
+/// Legge un file DXF (ASCII o binario) con ACadSharp e lo converte nel modello interno.
+/// </summary>
+public static class DxfImporter
+{
+    /// <summary>Profondità massima di blocchi annidati: oltre si assume un riferimento circolare.</summary>
+    private const int MaxBlockDepth = 32;
+
+    /// <summary>Punti per approssimare spline: ACadSharp ne genera tanti quanti richiesti.</summary>
+    private const int SplinePrecision = 64;
+
+    private const uint SplineFitIterations = 1000;
+
+    public static ImportResult Load(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var result = Load(stream);
+        result.Document.FilePath = path;
+        ResolveImagePaths(result.Document, Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
+        return result;
+    }
+
+    /// <summary>
+    /// Le immagini collegate con un percorso relativo, o spostate insieme al disegno, si cercano nella cartella del DXF.
+    /// </summary>
+    internal static void ResolveImagePaths(CadDocument document, string folder)
+    {
+        foreach (var image in document.ModelSpace.OfType<ImageEntity>())
+        {
+            if (Path.IsPathRooted(image.Path) && File.Exists(image.Path))
+            {
+                continue;
+            }
+
+            string[] candidates = [Path.Combine(folder, image.Path), Path.Combine(folder, Path.GetFileName(image.Path.Replace('\\', '/')))];
+            if (candidates.FirstOrDefault(File.Exists) is { } found)
+            {
+                image.Path = Path.GetFullPath(found);
+            }
+        }
+    }
+
+    public static ImportResult Load(Stream stream)
+    {
+        var errors = new List<string>();
+        var source = DxfReader.Read(stream, (_, e) =>
+        {
+            // Gli avvisi di ACadSharp riguardano quasi sempre dizionari irrilevanti per il 2D: si tengono solo gli errori.
+            if (e.NotificationType is NotificationType.Error)
+            {
+                errors.Add(e.Message);
+            }
+        });
+
+        return new ImportResult(Convert(source), errors);
+    }
+
+    public static CadDocument Convert(Acad.CadDocument source)
+    {
+        var dxfSource = new DxfSource(source);
+        var converter = new Converter(new CadDocument { Source = dxfSource });
+        converter.ConvertLinetypes(source);
+        converter.ConvertLayers(source);
+        converter.ConvertTextStyles(source);
+        converter.ConvertDimensionStyles(source);
+        var converted = new Dictionary<Acad.Entities.Entity, Entity>(ReferenceEqualityComparer.Instance);
+        foreach (var entity in source.Entities)
+        {
+            if (converter.Add(entity, converter.Document.ModelSpace, depth: 0) is { } result)
+            {
+                result.SourceTag = entity;
+                dxfSource.ConvertedEntities.Add(entity);
+                converted[entity] = result;
+            }
+        }
+
+        ConvertGroups(source, converter.Document, converted);
+        return converter.Document;
+    }
+
+    /// <summary>Gruppi del file: un'entità in più gruppi resta nel primo.</summary>
+    private static void ConvertGroups(Acad.CadDocument source, CadDocument document, Dictionary<Acad.Entities.Entity, Entity> converted)
+    {
+        if (source.Groups is null)
+        {
+            return;
+        }
+
+        foreach (var group in source.Groups)
+        {
+            var members = group.Entities.Select(e => converted.GetValueOrDefault(e)).OfType<Entity>().Where(e => e.Group is null).ToList();
+            if (members.Count == 0 || document.AddGroup(group.IsUnnamed ? null : group.Name) is not { } target)
+            {
+                continue;
+            }
+
+            target.Description = group.Description ?? string.Empty;
+            target.Selectable = group.Selectable;
+            foreach (var member in members)
+            {
+                member.Group = target;
+            }
+        }
+    }
+
+    private sealed class Converter(CadDocument document)
+    {
+        private readonly HashSet<string> _convertedBlocks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _convertedTextStyles = new(StringComparer.OrdinalIgnoreCase);
+
+        public CadDocument Document { get; } = document;
+
+        /// <summary>Stili di testo del file; quello corrente del file diventa corrente anche qui.</summary>
+        public void ConvertTextStyles(Acad.CadDocument source)
+        {
+            foreach (var style in source.TextStyles)
+            {
+                if (string.IsNullOrEmpty(style.Name) || style.IsShapeFile)
+                {
+                    continue;
+                }
+
+                ConvertTextStyle(style);
+            }
+
+            if (source.Header.CurrentTextStyleName is { Length: > 0 } current && Document.FindTextStyle(current) is { } found)
+            {
+                Document.CurrentTextStyle = found;
+            }
+        }
+
+        private TextStyle? ConvertTextStyle(Acad.Tables.TextStyle? source)
+        {
+            if (source is null || string.IsNullOrEmpty(source.Name))
+            {
+                return null;
+            }
+
+            if (Document.FindTextStyle(source.Name) is { } known && _convertedTextStyles.Contains(source.Name))
+            {
+                return known;
+            }
+
+            var style = Document.GetOrAddTextStyle(source.Name);
+            _convertedTextStyles.Add(source.Name);
+            style.FontFile = string.IsNullOrWhiteSpace(source.Filename) ? null : source.Filename;
+            style.FontFamily = TextStyle.FamilyFromFile(source.Filename);
+            style.Height = source.Height > 0 ? source.Height : 0;
+            style.WidthFactor = source.Width > 0 ? source.Width : 1;
+            style.ObliqueAngle = source.ObliqueAngle;
+            return style;
+        }
+
+        public void ConvertLinetypes(Acad.CadDocument source)
+        {
+            if (source.Header.LineTypeScale > 0)
+            {
+                Document.LinetypeScale = source.Header.LineTypeScale;
+            }
+
+            foreach (var linetype in source.LineTypes)
+            {
+                if (IsSpecialLinetype(linetype.Name))
+                {
+                    continue;
+                }
+
+                // Forme e testi dei tipi di linea complessi si riducono al loro ingombro lungo la linea.
+                var pattern = linetype.Segments.Select(segment => segment.Length).ToList();
+                Document.AddLinetype(new Linetype(linetype.Name, linetype.Description ?? string.Empty, pattern));
+            }
+        }
+
+        private static bool IsSpecialLinetype(string name) =>
+            name.Equals("ByLayer", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("ByBlock", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals(Linetype.ContinuousName, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Null = DaLayer.</summary>
+        private Linetype? ToLinetype(Acad.Tables.LineType? linetype)
+        {
+            if (linetype is null || linetype.Name.Equals("ByLayer", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (linetype.Name.Equals("ByBlock", StringComparison.OrdinalIgnoreCase))
+            {
+                return Linetype.ByBlock;
+            }
+
+            return Document.FindLinetype(linetype.Name) ?? Linetype.Continuous;
+        }
+
+        public void ConvertLayers(Acad.CadDocument source)
+        {
+            foreach (var layer in source.Layers)
+            {
+                var target = Document.GetOrAddLayer(layer.Name);
+                target.Linetype = ToLinetype(layer.LineType) is { } lt && !ReferenceEquals(lt, Linetype.ByBlock) ? lt : Linetype.Continuous;
+                target.Color = ToRgb(layer.Color) ?? CadColor.White;
+                target.IsOn = layer.IsOn;
+                target.IsFrozen = layer.Flags.HasFlag(Acad.Tables.LayerFlags.Frozen);
+                target.IsLocked = layer.Flags.HasFlag(Acad.Tables.LayerFlags.Locked);
+                target.LineWeight = (int)layer.LineWeight is >= 0 and var w ? w : LineWeight.Default;
+                target.FileName = layer.Name;
+            }
+        }
+
+        public Entity? Add(AcadEntities.Entity source, List<Entity> target, int depth)
+        {
+            if (source.IsInvisible)
+            {
+                return null;
+            }
+
+            var converted = ConvertEntity(source, depth);
+            if (converted is null)
+            {
+                Document.AddUnsupported(source.ObjectName);
+                return null;
+            }
+
+            converted.Color = ToEntityColor(source.Color);
+            converted.Linetype = ToLinetype(source.LineType);
+            converted.LinetypeScale = source.LineTypeScale > 0 ? source.LineTypeScale : 1;
+            converted.LineWeight = (int)source.LineWeight;
+            target.Add(converted);
+            return converted;
+        }
+
+        private Entity? ConvertEntity(AcadEntities.Entity source, int depth)
+        {
+            var layer = Document.GetOrAddLayer(source.Layer?.Name ?? Layer.DefaultName);
+            switch (source)
+            {
+                case AcadEntities.Line line:
+                    return new LineEntity(layer, ToVector(line.StartPoint), ToVector(line.EndPoint));
+
+                // Arc deriva da Circle: va controllato prima.
+                case AcadEntities.Arc arc:
+                {
+                    var ocs = Ocs.From(arc.Normal);
+                    var start = ocs.Angle(arc.StartAngle);
+                    var end = ocs.Angle(arc.EndAngle);
+                    return ocs.Mirrored
+                        ? new ArcEntity(layer, ocs.Point(arc.Center), arc.Radius, end, start)
+                        : new ArcEntity(layer, ocs.Point(arc.Center), arc.Radius, start, end);
+                }
+
+                case AcadEntities.Circle circle:
+                    return new CircleEntity(layer, Ocs.From(circle.Normal).Point(circle.Center), circle.Radius);
+
+                case AcadEntities.Ellipse ellipse:
+                {
+                    var major = ToVector(ellipse.MajorAxisEndPoint);
+                    // Asse minore = normale × asse maggiore, ridotto del rapporto tra gli assi.
+                    var minor = (ellipse.Normal.Z < 0 ? -major.Perpendicular() : major.Perpendicular()) * ellipse.RadiusRatio;
+                    return new EllipseEntity(layer, ToVector(ellipse.Center), major, minor, ellipse.StartParameter, ellipse.EndParameter);
+                }
+
+                case AcadEntities.LwPolyline lw:
+                {
+                    var ocs = Ocs.From(lw.Normal);
+                    return new PolylineEntity(
+                        layer,
+                        lw.Vertices.Select(v => new PolylineVertex(ocs.Point(v.Location.X, v.Location.Y), ocs.Bulge(v.Bulge))),
+                        lw.IsClosed);
+                }
+
+                case AcadEntities.IPolyline polyline when source is not AcadEntities.PolyfaceMesh and not AcadEntities.PolygonMesh:
+                {
+                    var ocs = source is AcadEntities.Polyline2D p2 ? Ocs.From(p2.Normal) : Ocs.World;
+                    return new PolylineEntity(
+                        layer,
+                        polyline.Vertices.Select(v => new PolylineVertex(
+                            ocs.Point(v.Location[0], v.Location[1]),
+                            ocs.Bulge(v.Bulge))),
+                        polyline.IsClosed);
+                }
+
+                case AcadEntities.Spline spline:
+                    return ConvertSpline(spline, layer);
+
+                case AcadEntities.Point point:
+                    return new PointEntity(layer, ToVector(point.Location));
+
+                case AcadEntities.TextEntity text:
+                {
+                    var converted = ConvertText(text, layer);
+                    converted.Style = ConvertTextStyle(text.Style);
+                    return converted;
+                }
+
+                case AcadEntities.MText mtext:
+                {
+                    var converted = ConvertMText(mtext, layer);
+                    converted.Style = ConvertTextStyle(mtext.Style);
+                    return converted;
+                }
+
+                case AcadEntities.Leader leader when leader.Vertices.Count >= 2 && leader.Normal.Z > 0.999:
+                    return new LeaderEntity(layer, leader.Vertices.Select(ToVector), ConvertDimensionStyle(leader.Style))
+                    {
+                        HasArrow = leader.ArrowHeadEnabled,
+                    };
+
+                case AcadEntities.Insert insert:
+                    return ConvertInsert(insert, layer, depth);
+
+                // Le quote hanno la loro grafica già pronta in un blocco anonimo, in coordinate mondo.
+                case AcadEntities.Dimension { Block: { } block } dimension:
+                {
+                    var definition = ConvertBlock(block, depth);
+                    if (definition is null)
+                    {
+                        return null;
+                    }
+
+                    return ConvertDimension(dimension, layer, definition) ?? (Entity)new InsertEntity(layer, definition);
+                }
+
+                case AcadEntities.Solid solid:
+                {
+                    var ocs = Ocs.From(solid.Normal);
+                    // Ordine DXF "a Z": 1, 2, 4, 3 percorre il contorno. Con 3 = 4 è un triangolo.
+                    var corners = new List<Vector2> { ocs.Point(solid.FirstCorner), ocs.Point(solid.SecondCorner), ocs.Point(solid.FourthCorner) };
+                    if (!ocs.Point(solid.ThirdCorner).IsAlmostEqual(corners[2]))
+                    {
+                        corners.Add(ocs.Point(solid.ThirdCorner));
+                    }
+
+                    return new SolidEntity(layer, corners);
+                }
+
+                case AcadEntities.Hatch hatch:
+                    return ConvertHatch(hatch, layer);
+
+                case AcadEntities.RasterImage { Definition: { } definition } image when image.Size.X >= 1 && image.Size.Y >= 1:
+                {
+                    var width = (int)Math.Round(image.Size.X);
+                    var height = (int)Math.Round(image.Size.Y);
+                    return new ImageEntity(layer, definition.FileName ?? "", ToVector(image.InsertPoint), ToVector(image.UVector) * width, ToVector(image.VVector) * height, width, height)
+                    {
+                        Opacity = Math.Clamp(1 - image.Fade / 100.0, 0.1, 1),
+                    };
+                }
+
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>Quote dei tipi gestiti: punti di definizione e grafica originale. Le altre restano blocchi.</summary>
+        private DimensionEntity? ConvertDimension(AcadEntities.Dimension source, Layer layer, BlockDefinition graphics)
+        {
+            if (source.Normal.Z < 0.999)
+            {
+                return null;
+            }
+
+            var style = ConvertDimensionStyle(source.Style);
+            DimensionEntity? result = source switch
+            {
+                AcadEntities.DimensionLinear linear => new DimensionEntity(layer, DimensionKind.Linear, style)
+                {
+                    First = ToVector(linear.FirstPoint),
+                    Second = ToVector(linear.SecondPoint),
+                    Location = ToVector(linear.DefinitionPoint),
+                    Rotation = linear.Rotation,
+                },
+                AcadEntities.DimensionAligned aligned => new DimensionEntity(layer, DimensionKind.Aligned, style)
+                {
+                    First = ToVector(aligned.FirstPoint),
+                    Second = ToVector(aligned.SecondPoint),
+                    Location = ToVector(aligned.DefinitionPoint),
+                },
+                AcadEntities.DimensionRadius radius => new DimensionEntity(layer, DimensionKind.Radius, style)
+                {
+                    First = ToVector(radius.DefinitionPoint),
+                    Second = ToVector(radius.AngleVertex),
+                    Location = ToVector(radius.TextMiddlePoint),
+                },
+                AcadEntities.DimensionDiameter diameter => new DimensionEntity(layer, DimensionKind.Diameter, style)
+                {
+                    First = (ToVector(diameter.DefinitionPoint) + ToVector(diameter.AngleVertex)) / 2,
+                    Second = ToVector(diameter.AngleVertex),
+                    Location = ToVector(diameter.TextMiddlePoint),
+                },
+                AcadEntities.DimensionAngular3Pt angular => new DimensionEntity(layer, DimensionKind.Angular, style)
+                {
+                    Vertex = ToVector(angular.AngleVertex),
+                    First = ToVector(angular.FirstPoint),
+                    Second = ToVector(angular.SecondPoint),
+                    Location = ToVector(angular.DefinitionPoint),
+                },
+                AcadEntities.DimensionOrdinate ordinate => new DimensionEntity(layer, DimensionKind.Ordinate, style)
+                {
+                    Vertex = ToVector(ordinate.DefinitionPoint),
+                    First = ToVector(ordinate.FeatureLocation),
+                    Second = ToVector(ordinate.LeaderEndpoint),
+                    Location = ToVector(ordinate.LeaderEndpoint),
+                    OrdinateX = ordinate.IsOrdinateTypeX,
+                },
+                AcadEntities.DimensionArc arc => new DimensionEntity(layer, DimensionKind.ArcLength, style)
+                {
+                    Vertex = ToVector(arc.Center),
+                    First = ToVector(arc.FirstPoint),
+                    Second = ToVector(arc.SecondPoint),
+                    Location = ToVector(arc.DefinitionPoint),
+                },
+                _ => null,
+            };
+
+            if (result is null)
+            {
+                return null;
+            }
+
+            result.TextOverride = string.IsNullOrEmpty(source.Text) ? null : TextCodes.MTextToPlain(source.Text);
+            result.Graphics = graphics;
+            return result;
+        }
+
+        /// <summary>Stili di quota del file; quello corrente porta la scala del disegno.</summary>
+        public void ConvertDimensionStyles(Acad.CadDocument source)
+        {
+            foreach (var style in source.DimensionStyles)
+            {
+                if (!string.IsNullOrEmpty(style.Name))
+                {
+                    ConvertDimensionStyle(style);
+                }
+            }
+
+            if (source.Header.CurrentDimensionStyleName is { Length: > 0 } current &&
+                Document.DimensionStyles.FirstOrDefault(s => s.Name.Equals(current, StringComparison.OrdinalIgnoreCase)) is { } found)
+            {
+                Document.CurrentDimensionStyle = found;
+            }
+        }
+
+        private DimensionStyle ConvertDimensionStyle(Acad.Tables.DimensionStyle? source)
+        {
+            if (source is null)
+            {
+                return Document.CurrentDimensionStyle;
+            }
+
+            var known = Document.DimensionStyles.Any(s => s.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase));
+            var style = Document.GetOrAddDimensionStyle(source.Name);
+            if (!known || source.Name == DimensionStyle.DefaultName)
+            {
+                style.TextHeight = source.TextHeight;
+                style.ArrowSize = source.ArrowSize;
+                style.ExtensionOffset = source.ExtensionLineOffset;
+                style.ExtensionExtend = source.ExtensionLineExtension;
+                style.TextGap = Math.Abs(source.DimensionLineGap);
+                style.Decimals = source.DecimalPlaces;
+                style.DecimalSeparator = source.DecimalSeparator == '\0' ? '.' : source.DecimalSeparator;
+                style.Scale = source.ScaleFactor > 0 ? source.ScaleFactor : 1;
+                style.LinearFactor = source.LinearScaleFactor > 0 ? source.LinearScaleFactor : 1;
+                style.BaselineSpacing = source.DimensionLineIncrement > 0 ? source.DimensionLineIncrement : style.BaselineSpacing;
+            }
+
+            return style;
+        }
+
+        private static HatchEntity? ConvertHatch(AcadEntities.Hatch hatch, Layer layer)
+        {
+            var ocs = Ocs.From(hatch.Normal);
+            var loops = new List<IReadOnlyList<PolylineVertex>>();
+            foreach (var path in hatch.Paths)
+            {
+                if (path.Edges.Count == 1 && path.Edges[0] is AcadEntities.Hatch.BoundaryPath.Polyline polyline)
+                {
+                    loops.Add([.. polyline.Vertices.Select(v => new PolylineVertex(ocs.Point(v.X, v.Y), ocs.Bulge(v.Z)))]);
+                    continue;
+                }
+
+                // Contorni fatti di linee, archi, ellissi e spline: approssimati con una spezzata.
+                try
+                {
+                    var points = path.GetPoints(SplinePrecision).Select(p => new PolylineVertex(ocs.Point(p.X, p.Y))).ToList();
+                    if (points.Count >= 3)
+                    {
+                        loops.Add(points);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Un contorno che ACadSharp non sa approssimare si salta; l'originale resta nel file.
+                }
+            }
+
+            if (loops.Count == 0)
+            {
+                return null;
+            }
+
+            var lines = hatch.IsSolid
+                ? []
+                : hatch.Pattern.Lines.Select(l => new HatchPatternLine(
+                    ocs.Angle(l.Angle),
+                    ocs.Point(l.BasePoint.X, l.BasePoint.Y),
+                    ocs.Point(l.Offset.X, l.Offset.Y),
+                    [.. l.DashLengths]));
+            return new HatchEntity(layer, loops, hatch.IsSolid ? HatchPatterns.Solid : hatch.Pattern.Name ?? "", hatch.IsSolid, lines)
+            {
+                PatternScale = hatch.PatternScale > 0 ? hatch.PatternScale : 1,
+                PatternAngle = hatch.PatternAngle,
+            };
+        }
+
+        private InsertEntity? ConvertInsert(AcadEntities.Insert insert, Layer layer, int depth)
+        {
+            if (insert.Block is null)
+            {
+                return null;
+            }
+
+            var definition = ConvertBlock(insert.Block, depth);
+            if (definition is null)
+            {
+                return null;
+            }
+
+            var ocs = Ocs.From(insert.Normal);
+            var result = new InsertEntity(layer, definition)
+            {
+                Transform = InsertEntity.BuildTransform(
+                    definition.BasePoint,
+                    new Vector2(insert.InsertPoint.X, insert.InsertPoint.Y),
+                    insert.XScale,
+                    insert.YScale,
+                    insert.Rotation) * ocs.Matrix,
+            };
+
+            // MINSERT: righe e colonne di copie, convertite in un blocco che le contiene tutte.
+            if (insert.RowCount > 1 || insert.ColumnCount > 1)
+            {
+                var grid = Document.GetOrAddBlock($"*MINSERT-{Guid.NewGuid():N}");
+                for (var row = 0; row < Math.Max((int)insert.RowCount, 1); row++)
+                {
+                    for (var column = 0; column < Math.Max((int)insert.ColumnCount, 1); column++)
+                    {
+                        var offset = new Vector2(column * insert.ColumnSpacing, row * insert.RowSpacing);
+                        grid.Entities.Add(new InsertEntity(layer, definition)
+                        {
+                            Transform = Matrix2D.Translation(offset) * result.Transform,
+                        });
+                    }
+                }
+
+                result = new InsertEntity(layer, grid);
+            }
+
+            foreach (var attribute in insert.Attributes)
+            {
+                Add(attribute, result.Attributes, depth);
+            }
+
+            return result;
+        }
+
+        private BlockDefinition? ConvertBlock(Acad.Tables.BlockRecord record, int depth)
+        {
+            if (depth >= MaxBlockDepth)
+            {
+                return null;
+            }
+
+            var definition = Document.GetOrAddBlock(record.Name);
+            if (_convertedBlocks.Add(record.Name))
+            {
+                if (record.BlockEntity is { } block)
+                {
+                    definition.BasePoint = new Vector2(block.BasePoint.X, block.BasePoint.Y);
+                }
+
+                foreach (var entity in record.Entities)
+                {
+                    Add(entity, definition.Entities, depth + 1);
+                }
+            }
+
+            return definition;
+        }
+
+        private static Entity? ConvertSpline(AcadEntities.Spline spline, Layer layer)
+        {
+            // Le spline definite solo da punti di passaggio vanno prima convertite in punti di controllo.
+            if (spline.ControlPoints.Count == 0 && spline.FitPoints.Count > 1)
+            {
+                spline.UpdateFromFitPoints(SplineFitIterations);
+            }
+
+            // Se grado, punti e nodi tornano si tiene la spline vera; i pesi solo se sono uno per punto.
+            if (spline.Degree >= 1 && spline.ControlPoints.Count > spline.Degree && spline.Knots.Count == spline.ControlPoints.Count + spline.Degree + 1)
+            {
+                var weights = spline.Weights.Count == spline.ControlPoints.Count && spline.Weights.Any(w => w != 1) ? spline.Weights : null;
+                return new SplineEntity(layer, spline.Degree, spline.ControlPoints.Select(ToVector), spline.Knots, weights, spline.IsClosed);
+            }
+
+            if (spline.TryPolygonalVertexes(SplinePrecision, out var points) && points.Count > 1)
+            {
+                return new PolylinePathEntity(layer, points.Select(ToVector), spline.IsClosed);
+            }
+
+            // Ultima risorsa: la spezzata dei punti noti, meglio di niente a schermo.
+            var fallback = spline.FitPoints.Count > 1 ? spline.FitPoints : spline.ControlPoints;
+            return fallback.Count > 1 ? new PolylinePathEntity(layer, fallback.Select(ToVector), spline.IsClosed) : null;
+        }
+
+        private static TextEntity ConvertText(AcadEntities.TextEntity text, Layer layer)
+        {
+            var aligned = text.HorizontalAlignment != AcadEntities.TextHorizontalAlignment.Left ||
+                          text.VerticalAlignment != AcadEntities.TextVerticalAlignmentType.Baseline;
+            var ocs = Ocs.From(text.Normal);
+            var anchor = aligned ? text.AlignmentPoint : text.InsertPoint;
+            return new TextEntity(layer, ocs.Point(anchor), text.Height, TextCodes.DecodeSpecialCharacters(text.Value ?? string.Empty))
+            {
+                Rotation = ocs.Angle(text.Rotation),
+                WidthFactor = text.WidthFactor > 0 ? text.WidthFactor : 1,
+                HorizontalAlignment = text.HorizontalAlignment switch
+                {
+                    AcadEntities.TextHorizontalAlignment.Center or AcadEntities.TextHorizontalAlignment.Middle => TextHorizontalAlignment.Center,
+                    AcadEntities.TextHorizontalAlignment.Right => TextHorizontalAlignment.Right,
+                    _ => TextHorizontalAlignment.Left,
+                },
+                VerticalAlignment = text.HorizontalAlignment == AcadEntities.TextHorizontalAlignment.Middle
+                    ? TextVerticalAlignment.Middle
+                    : text.VerticalAlignment switch
+                    {
+                        AcadEntities.TextVerticalAlignmentType.Bottom => TextVerticalAlignment.Bottom,
+                        AcadEntities.TextVerticalAlignmentType.Middle => TextVerticalAlignment.Middle,
+                        AcadEntities.TextVerticalAlignmentType.Top => TextVerticalAlignment.Top,
+                        _ => TextVerticalAlignment.Baseline,
+                    },
+            };
+        }
+
+        private static TextEntity ConvertMText(AcadEntities.MText mtext, Layer layer)
+        {
+            var value = TextCodes.MTextToPlain(mtext.Value ?? string.Empty);
+            var attachment = (int)mtext.AttachmentPoint;
+            // AttachmentPoint: 1..9 = alto/medio/basso × sinistra/centro/destra.
+            var row = attachment is >= 1 and <= 9 ? (attachment - 1) / 3 : 0;
+            var column = attachment is >= 1 and <= 9 ? (attachment - 1) % 3 : 0;
+            return new TextEntity(layer, ToVector(mtext.InsertPoint), mtext.Height, value)
+            {
+                Rotation = mtext.Rotation,
+                LineSpacing = 5.0 / 3.0 * (mtext.LineSpacing > 0 ? mtext.LineSpacing : 1),
+                HorizontalAlignment = (TextHorizontalAlignment)column,
+                VerticalAlignment = row switch
+                {
+                    0 => TextVerticalAlignment.Top,
+                    1 => TextVerticalAlignment.Middle,
+                    _ => TextVerticalAlignment.Bottom,
+                },
+            };
+        }
+
+        private static EntityColor ToEntityColor(Acad.Color color)
+        {
+            if (color.IsByLayer)
+            {
+                return EntityColor.ByLayer;
+            }
+
+            if (color.IsByBlock)
+            {
+                return EntityColor.ByBlock;
+            }
+
+            return ToRgb(color) is { } rgb ? EntityColor.Explicit(rgb) : EntityColor.ByLayer;
+        }
+
+        private static CadColor? ToRgb(Acad.Color color)
+        {
+            if (color.IsByLayer || color.IsByBlock)
+            {
+                return null;
+            }
+
+            var rgb = color.GetRgb();
+            return rgb.Length >= 3 ? new CadColor(rgb[0], rgb[1], rgb[2]) : null;
+        }
+
+        private static Vector2 ToVector(CSMath.XYZ p) => new(p.X, p.Y);
+    }
+
+    /// <summary>
+    /// Sistema di coordinate dell'oggetto (OCS) per entità piane. Gestisce solo la normale +Z o -Z:
+    /// con -Z il disegno è specchiato rispetto all'asse Y.
+    /// </summary>
+    private readonly record struct Ocs(bool Mirrored)
+    {
+        public static readonly Ocs World = new(false);
+
+        public static Ocs From(CSMath.XYZ normal) => new(normal.Z < 0);
+
+        public Matrix2D Matrix => Mirrored ? Matrix2D.Scaling(-1, 1) : Matrix2D.Identity;
+
+        public Vector2 Point(double x, double y) => Mirrored ? new Vector2(-x, y) : new Vector2(x, y);
+
+        public Vector2 Point(CSMath.XYZ p) => Point(p.X, p.Y);
+
+        public double Angle(double angle) => Mirrored ? Math.PI - angle : angle;
+
+        public double Bulge(double bulge) => Mirrored ? -bulge : bulge;
+    }
+}
