@@ -76,6 +76,11 @@ public static class DxfExporter
                 {
                     written.LineType = linetype;
                 }
+
+                if (Math.Abs(written.LineTypeScale - entity.LinetypeScale) > 1e-12)
+                {
+                    written.LineTypeScale = entity.LinetypeScale;
+                }
             }
             else
             {

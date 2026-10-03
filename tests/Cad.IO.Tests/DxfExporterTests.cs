@@ -344,4 +344,23 @@ public sealed class DxfDraftingRoundTripTests : IDisposable
         Assert.Null(reloaded.FindLayer("VECCHIO"));
         Assert.Equal("NUOVO", Assert.Single(reloaded.ModelSpace.OfType<LineEntity>()).Layer.Name);
     }
+
+    [Fact]
+    public void Edited_text_from_file_keeps_the_new_value_after_save()
+    {
+        var path = Path.Combine(_folder, "testo.dxf");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", "demo.dxf"), path);
+        var document = DxfImporter.Load(path).Document;
+        var editor = new Cad.Editing.Editor(document) { SnapEnabled = false };
+        editor.SubmitText("ED");
+        editor.Click(new Vector2(5, 136), 0.5);
+        editor.SubmitText("Modificato");
+        editor.SubmitText("");
+        Assert.Contains(document.ModelSpace.OfType<TextEntity>(), t => t.Value == "Modificato");
+
+        DxfExporter.Save(document, path);
+        var reloaded = DxfImporter.Load(path).Document;
+        Assert.Contains(reloaded.ModelSpace.OfType<TextEntity>(), t => t.Value == "Modificato");
+        Assert.DoesNotContain(reloaded.ModelSpace.OfType<TextEntity>(), t => t.Value.StartsWith("PIASTRA"));
+    }
 }

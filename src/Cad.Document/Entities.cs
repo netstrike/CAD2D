@@ -54,6 +54,12 @@ public abstract class Entity
         return result;
     }
 
+    /// <summary>
+    /// Copia da modificare nel contenuto o nella forma (testo, estremi, vertici): non resta legata all'originale letto
+    /// dal file, così il salvataggio la riconverte invece di riscrivere l'originale trasformato.
+    /// </summary>
+    public Entity CopyDetached() => TransformCore(Matrix2D.Identity).CopyStyleFrom<Entity>(this);
+
     /// <summary>Nuova entità con il grip <paramref name="index"/> spostato in <paramref name="position"/>.</summary>
     public Entity WithGripMoved(int index, Vector2 position)
     {

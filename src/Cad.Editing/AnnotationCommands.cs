@@ -165,7 +165,7 @@ public static class AnnotationCommands
                     var value = await ed.GetStringAsync("Nuovo testo:", text.Value.Replace("\n", LineBreak, StringComparison.Ordinal));
                     if (value.IsOk)
                     {
-                        var copy = (TextEntity)text.Transformed(Matrix2D.Identity);
+                        var copy = (TextEntity)text.CopyDetached();
                         copy.Value = value.Text!.Replace(LineBreak, "\n", StringComparison.Ordinal);
                         ed.Document.Edit("MODIFICATESTO", e => e.Replace(text, copy));
                     }
