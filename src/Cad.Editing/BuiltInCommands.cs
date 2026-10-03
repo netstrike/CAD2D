@@ -25,6 +25,7 @@ internal static class BuiltInCommands
         BlockCommands.Register(editor);
         LayerCommands.Register(editor);
         ClipboardCommands.Register(editor);
+        GroupCommands.Register(editor);
         AidCommands.Register(editor);
         MeasureCommands.Register(editor);
     }
@@ -279,11 +280,12 @@ internal static class BuiltInCommands
             }
 
             var delta = to.Point - b;
+            var copies = GroupCommands.Copies(ed.Document, entities, entity => entity.Transformed(Matrix2D.Translation(delta)));
             ed.Document.Edit("COPIA", e =>
             {
-                foreach (var entity in entities)
+                foreach (var copy in copies)
                 {
-                    e.Add(entity.Transformed(Matrix2D.Translation(delta)));
+                    e.Add(copy);
                 }
             });
         }

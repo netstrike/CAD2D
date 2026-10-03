@@ -102,7 +102,35 @@ public static class DxfExporter
             source.ConvertedEntities.Add(written);
         }
 
+        SyncGroups(document, target);
         return target;
+    }
+
+    /// <summary>I gruppi del file si riscrivono da capo con i membri attuali; quelli rimasti vuoti spariscono.</summary>
+    private static void SyncGroups(CadDocument document, Acad.CadDocument target)
+    {
+        if (target.Groups is null)
+        {
+            return;
+        }
+
+        foreach (var name in target.Groups.Select(g => g.Name).ToList())
+        {
+            target.Groups.Remove(name);
+        }
+
+        foreach (var group in document.Groups)
+        {
+            var members = document.Members(group).Select(e => e.SourceTag).OfType<AcadEntities.Entity>().ToList();
+            if (members.Count == 0)
+            {
+                continue;
+            }
+
+            var written = group.IsUnnamed ? target.Groups.CreateGroup(members) : target.Groups.CreateGroup(group.Name, members);
+            written.Description = group.Description;
+            written.Selectable = group.Selectable;
+        }
     }
 
     private static Dictionary<string, Acad.Tables.Layer> SyncLayers(CadDocument document, Acad.CadDocument target)

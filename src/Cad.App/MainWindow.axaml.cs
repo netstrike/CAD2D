@@ -141,6 +141,10 @@ public partial class MainWindow : Window
             case "SELEZIONATUTTO":
                 _editor?.SelectAll();
                 break;
+            case "SELGRUPPI":
+                GroupToggle.IsChecked = GroupToggle.IsChecked != true;
+                AppendHistory(GroupToggle.IsChecked == true ? "<Selezione dei gruppi attiva>" : "<Selezione dei gruppi disattivata>");
+                break;
             case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "OPZIONI":
                 ShowDialogCommand(command);
                 return;

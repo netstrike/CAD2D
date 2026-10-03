@@ -51,18 +51,22 @@ internal static class ModifyCommands
         }
 
         var replace = erase.Keyword == "Sì";
+        var copies = replace ? [] : GroupCommands.Copies(ed.Document, entities, entity => entity.Transformed(mirror));
         ed.Document.Edit("SPECCHIA", e =>
         {
+            if (!replace)
+            {
+                foreach (var copy in copies)
+                {
+                    e.Add(copy);
+                }
+
+                return;
+            }
+
             foreach (var entity in entities)
             {
-                if (replace)
-                {
-                    e.Replace(entity, entity.Transformed(mirror));
-                }
-                else
-                {
-                    e.Add(entity.Transformed(mirror));
-                }
+                e.Replace(entity, entity.Transformed(mirror));
             }
         });
         ed.Selection.Clear();
@@ -172,6 +176,7 @@ internal static class ModifyCommands
 
             if (build(side.Point) is { } result)
             {
+                result.Group = null;
                 ed.Document.Edit("OFFSET", e => e.Add(result));
             }
             else
@@ -412,14 +417,12 @@ internal static class ModifyCommands
             return;
         }
 
+        var copies = transforms.SelectMany(m => GroupCommands.Copies(ed.Document, entities, entity => entity.Transformed(m))).ToList();
         ed.Document.Edit("SERIE", e =>
         {
-            foreach (var m in transforms)
+            foreach (var copy in copies)
             {
-                foreach (var entity in entities)
-                {
-                    e.Add(entity.Transformed(m));
-                }
+                e.Add(copy);
             }
         });
         ed.Write($"{transforms.Count * entities.Count} entità create.");
@@ -546,6 +549,7 @@ internal static class ModifyCommands
                     e.Remove(entity);
                     foreach (var part in parts)
                     {
+                        part.Group = null;
                         e.Add(part);
                     }
 

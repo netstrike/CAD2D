@@ -71,6 +71,8 @@ public static class Icons
         ["COPIABASE"] = ("M3,9h11v12h-11z M9,3h12v12h-12z", "M3,21 m-2,0 h4 M3,19v4"),
         ["POLARE"] = ("M3,20h18 M3,20 A16,16 0 0 1 19,4", "M3,20 L15,8 M3,20 L19,14"),
         ["ID"] = ("M4,20 L20,20 M4,20 L4,4", "M14,10 m-3,0 h6 M14,7 v6"),
+        ["GRUPPO"] = ("M3,3h2v2h-2z M19,3h2v2h-2z M3,19h2v2h-2z M19,19h2v2h-2z M6,4h12 M6,20h12 M4,6v12 M20,6v12", "M7,8h5v5h-5z M12,12 A3,3 0 1 0 12,12.01 M14,14h3v3h-3z"),
+        ["SEPARA"] = ("M3,3h2v2h-2z M19,19h2v2h-2z M6,4h3 M15,4h3 M4,6v3 M4,15v3 M20,6v3 M20,15v3 M6,20h3 M15,20h3", "M7,7h5v5h-5z M13,13h4v4h-4z"),
         ["TEMA"] = ("M12,3 A9,9 0 1 0 12,21z", "M12,3 A9,9 0 0 1 12,21z"),
     };
 

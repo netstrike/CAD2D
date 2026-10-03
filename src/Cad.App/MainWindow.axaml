@@ -61,6 +61,9 @@
         <MenuItem Header="C_ima" Click="OnMenuCommand" Tag="CIMA" />
         <MenuItem Header="Ser_ie" Click="OnMenuCommand" Tag="SERIE" />
         <MenuItem Header="Es_plodi" Click="OnMenuCommand" Tag="ESPLODI" />
+        <Separator />
+        <MenuItem Header="_Gruppo" Click="OnMenuCommand" Tag="GRUPPO" />
+        <MenuItem Header="Sepa_ra gruppo" Click="OnMenuCommand" Tag="SEPARA" />
       </MenuItem>
       <MenuItem Header="_Disegna">
         <MenuItem Header="_Linea" Click="OnMenuCommand" Tag="LINEA" />
@@ -127,6 +130,7 @@
           <ToggleButton x:Name="SnapToggle" Classes="status" Content="ESNAP" IsChecked="True" ToolTip.Tip="Snap agli oggetti (F3). Tasto destro: tipi di snap." />
           <ToggleButton x:Name="TrackToggle" Classes="status" Content="ETRACK" IsChecked="True" ToolTip.Tip="Tracciamento di allineamento (F11): fermati un attimo su uno snap per acquisirlo." />
           <ToggleButton x:Name="LineweightToggle" Classes="status" Content="LWT" ToolTip.Tip="Mostra gli spessori di linea" />
+          <ToggleButton x:Name="GroupToggle" Classes="status" Content="GRUPPI" IsChecked="True" ToolTip.Tip="Selezione dei gruppi (Ctrl+Maiusc+A): un clic su un membro seleziona tutto il gruppo." />
           <ToggleButton x:Name="QuickInputToggle" Classes="status" Content="QINPUT" IsChecked="True" ToolTip.Tip="Inserimento rapido vicino al cursore (F12). Tab blocca distanza e angolo." />
         </StackPanel>
         <TextBlock x:Name="CoordinatesText" Grid.Column="4" FontFamily="Consolas,monospace" VerticalAlignment="Center" MinWidth="190" TextAlignment="Right" FontSize="12" />

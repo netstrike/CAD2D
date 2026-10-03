@@ -32,6 +32,7 @@ public partial class MainWindow
         (PolarToggle, Key.F10, (ed, on) => ed.PolarEnabled = on, "Tracciamento polare"),
         (TrackToggle, Key.F11, (ed, on) => ed.TrackingEnabled = on, "ETrack"),
         (LineweightToggle, Key.None, (_, on) => { Canvas.ShowLineweights = on; Canvas.RefreshScene(); }, "Spessori di linea"),
+        (GroupToggle, Key.None, (ed, on) => ed.GroupSelectionEnabled = on, "Selezione dei gruppi"),
         (QuickInputToggle, Key.F12, (_, _) => { }, "Inserimento rapido"),
     ];
 
@@ -275,7 +276,7 @@ public partial class MainWindow
         CompletionPopup.IsOpen = true;
     }
 
-    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER", "GESTORELAYER", "OPZIONI", "SELEZIONATUTTO", "TEMA", "DLGTRATTEGGIO", "DLGSTILEQUOTA"];
+    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER", "GESTORELAYER", "OPZIONI", "SELEZIONATUTTO", "SELGRUPPI", "TEMA", "DLGTRATTEGGIO", "DLGSTILEQUOTA"];
 
     private void InitializeCompletion()
     {
@@ -399,6 +400,7 @@ public partial class MainWindow
             (Key.X, false) => "TAGLIACLIP",
             (Key.V, false) => "INCOLLACLIP",
             (Key.A, false) => "SELEZIONATUTTO",
+            (Key.A, true) => "SELGRUPPI",
             _ => null,
         };
     }

@@ -166,5 +166,52 @@ public sealed class CadDocument
     public void AddUnsupported(string typeName) =>
         UnsupportedEntities[typeName] = UnsupportedEntities.GetValueOrDefault(typeName) + 1;
 
+    private readonly List<CadGroup> _groups = [];
+
+    /// <summary>Gruppi del disegno; un gruppo senza membri nel modello resta finché non viene eliminato.</summary>
+    public IReadOnlyList<CadGroup> Groups => _groups;
+
+    public CadGroup? FindGroup(string name) =>
+        _groups.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Nuovo gruppo; senza nome riceve "*A1", "*A2"... Null se il nome è già usato o non valido.</summary>
+    public CadGroup? AddGroup(string? name = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            var index = 1;
+            while (FindGroup($"*A{index}") is not null)
+            {
+                index++;
+            }
+
+            name = $"*A{index}";
+        }
+        else if (!(IsValidName(name) || (name.Length > 1 && name[0] == '*' && IsValidName(name[1..]))) || FindGroup(name) is not null)
+        {
+            return null;
+        }
+
+        var group = new CadGroup(name);
+        _groups.Add(group);
+        return group;
+    }
+
+    public bool RemoveGroup(CadGroup group) => _groups.Remove(group);
+
+    public bool RenameGroup(CadGroup group, string name)
+    {
+        if (!IsValidName(name) || (FindGroup(name) is { } other && other != group))
+        {
+            return false;
+        }
+
+        group.Name = name;
+        return true;
+    }
+
+    /// <summary>Entità del modello che appartengono al gruppo.</summary>
+    public IEnumerable<Entity> Members(CadGroup group) => ModelSpace.Where(e => e.Group == group);
+
     public BoundingBox Bounds => ModelSpace.Aggregate(BoundingBox.Empty, (box, e) => box.Union(e.Bounds));
 }

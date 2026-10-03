@@ -67,7 +67,11 @@ internal static class BlockCommands
         var block = ed.Document.GetOrAddBlock(name);
         block.BasePoint = Vector2.Zero;
         var toLocal = Matrix2D.Translation(-basePoint.Point);
-        block.Entities.AddRange(entities.Select(e => e.Transformed(toLocal)));
+        block.Entities.AddRange(entities.Select(e => e.Transformed(toLocal)).Select(e =>
+        {
+            e.Group = null;
+            return e;
+        }));
 
         var mode = keep.Status == PromptStatus.Keyword ? keep.Keyword : "Sì";
         ed.Selection.Clear();

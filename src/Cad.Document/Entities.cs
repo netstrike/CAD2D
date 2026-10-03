@@ -18,6 +18,9 @@ public abstract class Entity
     /// <summary>Spessore di linea: centesimi di millimetro oppure DaLayer (il default), DaBlocco, Predefinito.</summary>
     public int LineWeight { get; set; } = Document.LineWeight.ByLayer;
 
+    /// <summary>Gruppo a cui appartiene l'entità, o null. Le copie fatte dai comandi (COPIA, SERIE...) non ne fanno parte.</summary>
+    public CadGroup? Group { get; set; }
+
     /// <summary>Copia layer, colore e tipo di linea da un'altra entità.</summary>
     public T CopyStyleFrom<T>(Entity other) where T : Entity
     {
@@ -26,6 +29,7 @@ public abstract class Entity
         Linetype = other.Linetype;
         LinetypeScale = other.LinetypeScale;
         LineWeight = other.LineWeight;
+        Group = other.Group;
         return (T)this;
     }
 

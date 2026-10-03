@@ -212,6 +212,45 @@ public sealed class DxfDraftingRoundTripTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     [Fact]
+    public void Groups_survive_save_and_reload()
+    {
+        var document = new CadDocument();
+        var layer = document.GetOrAddLayer("0");
+        var group = document.AddGroup("VITE")!;
+        group.Description = "vite M8";
+        var unnamed = document.AddGroup()!;
+        document.Edit("test", e =>
+        {
+            e.Add(new LineEntity(layer, Vector2.Zero, new Vector2(10, 0)) { Group = group });
+            e.Add(new CircleEntity(layer, Vector2.Zero, 4) { Group = group });
+            e.Add(new CircleEntity(layer, new Vector2(20, 0), 4) { Group = unnamed });
+            e.Add(new CircleEntity(layer, new Vector2(30, 0), 4));
+        });
+
+        var path = Path.Combine(_folder, "gruppi.dxf");
+        DxfExporter.Save(document, path);
+        var doc = DxfImporter.Load(path).Document;
+        var reloaded = doc.FindGroup("VITE")!;
+        Assert.Equal("vite M8", reloaded.Description);
+        Assert.Equal(2, doc.Members(reloaded).Count());
+        Assert.Single(doc.Groups, g => g.IsUnnamed);
+        Assert.Single(doc.ModelSpace, e => e.Group is null);
+
+        // Separati e risalvati: i gruppi spariscono dal file.
+        doc.Edit("test", e =>
+        {
+            foreach (var entity in doc.ModelSpace.ToList())
+            {
+                var copy = entity.Transformed(Matrix2D.Identity);
+                copy.Group = null;
+                e.Replace(entity, copy);
+            }
+        });
+        DxfExporter.Save(doc, path);
+        Assert.Empty(DxfImporter.Load(path).Document.Groups);
+    }
+
+    [Fact]
     public void Lineweights_of_layers_and_entities_survive_save_and_reload()
     {
         var document = new CadDocument();

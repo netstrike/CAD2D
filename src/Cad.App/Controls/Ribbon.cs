@@ -178,6 +178,11 @@ public sealed class Ribbon : TabControl
                 new("ESPLODI", "Esplodi", "Scompone blocchi, polilinee, quote"),
                 new("CANCELLA", "Cancella", "Cancella gli oggetti"),
             ]),
+            new("Gruppi",
+            [
+                new("GRUPPO", "Gruppo", "Riunisce gli oggetti in un gruppo: si selezionano insieme", Large: true),
+                new("SEPARA", "Separa", "Scioglie i gruppi degli oggetti scelti"),
+            ]),
             new("Appunti",
             [
                 new("INCOLLACLIP", "Incolla", "Incolla gli oggetti degli appunti (Ctrl+V)", Large: true),

@@ -90,6 +90,9 @@ public sealed class Editor
     /// <summary>Tracciamento di allineamento (ETrack): guide orizzontali e verticali dai punti di snap acquisiti (F11).</summary>
     public bool TrackingEnabled { get; set; } = true;
 
+    /// <summary>Un clic su un membro di un gruppo seleziona tutto il gruppo (Ctrl+Maiusc+A lo inverte).</summary>
+    public bool GroupSelectionEnabled { get; set; } = true;
+
     /// <summary>Griglia visibile (F7) e aggancio alla griglia (F9), con passo <see cref="GridSpacing"/>.</summary>
     public bool GridVisible { get; set; }
     public bool GridSnapEnabled { get; set; }
@@ -709,6 +712,11 @@ public sealed class Editor
 
     private void ApplySelection(IReadOnlyList<Entity> entities, bool remove)
     {
+        if (GroupSelectionEnabled)
+        {
+            entities = GroupCommands.ExpandToGroups(Document, entities);
+        }
+
         if (remove)
         {
             Selection.Remove(entities);

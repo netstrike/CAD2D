@@ -84,7 +84,9 @@ public static class ClipboardCommands
         }
 
         var move = Matrix2D.Translation(target.Point - clip.BasePoint);
-        var pasted = prepared.Select(e => e.Transformed(move)).ToList();
+        var pasted = sameDocument
+            ? GroupCommands.Copies(ed.Document, prepared, e => e.Transformed(move))
+            : prepared.Select(e => e.Transformed(move)).ToList();
         ed.Document.Edit("INCOLLACLIP", e =>
         {
             foreach (var entity in pasted)
@@ -107,6 +109,7 @@ public static class ClipboardCommands
         };
 
         copy.Layer = ImportLayer(entity.Layer, target);
+        copy.Group = null;
         copy.Linetype = ImportLinetype(entity.Linetype, target);
         if (copy is DimensionEntity dimension && entity is DimensionEntity source)
         {

@@ -62,16 +62,44 @@ public static class DxfImporter
         var converter = new Converter(new CadDocument { Source = dxfSource });
         converter.ConvertLinetypes(source);
         converter.ConvertLayers(source);
+        var converted = new Dictionary<Acad.Entities.Entity, Entity>(ReferenceEqualityComparer.Instance);
         foreach (var entity in source.Entities)
         {
-            if (converter.Add(entity, converter.Document.ModelSpace, depth: 0) is { } converted)
+            if (converter.Add(entity, converter.Document.ModelSpace, depth: 0) is { } result)
             {
-                converted.SourceTag = entity;
+                result.SourceTag = entity;
                 dxfSource.ConvertedEntities.Add(entity);
+                converted[entity] = result;
             }
         }
 
+        ConvertGroups(source, converter.Document, converted);
         return converter.Document;
+    }
+
+    /// <summary>Gruppi del file: un'entità in più gruppi resta nel primo.</summary>
+    private static void ConvertGroups(Acad.CadDocument source, CadDocument document, Dictionary<Acad.Entities.Entity, Entity> converted)
+    {
+        if (source.Groups is null)
+        {
+            return;
+        }
+
+        foreach (var group in source.Groups)
+        {
+            var members = group.Entities.Select(e => converted.GetValueOrDefault(e)).OfType<Entity>().Where(e => e.Group is null).ToList();
+            if (members.Count == 0 || document.AddGroup(group.IsUnnamed ? null : group.Name) is not { } target)
+            {
+                continue;
+            }
+
+            target.Description = group.Description ?? string.Empty;
+            target.Selectable = group.Selectable;
+            foreach (var member in members)
+            {
+                member.Group = target;
+            }
+        }
     }
 
     private sealed class Converter(CadDocument document)
