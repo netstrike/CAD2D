@@ -44,6 +44,16 @@ public sealed class DocumentEditor
         _document.ModelSpace[index] = replacement;
         _changes.Add(new Change(ChangeKind.Replaced, original, replacement, index));
     }
+
+    /// <summary>
+    /// Modifica di un'impostazione del disegno (stili, scala dei tipi di linea...) che si annulla insieme alle entità:
+    /// <paramref name="apply"/> si esegue subito e a ogni ripeti, <paramref name="revert"/> a ogni annulla.
+    /// </summary>
+    public void Setting(Action apply, Action revert)
+    {
+        apply();
+        _changes.Add(new Change(ChangeKind.Setting, null!, null, -1) { Apply = apply, Revert = revert });
+    }
 }
 
 internal enum ChangeKind
@@ -51,9 +61,14 @@ internal enum ChangeKind
     Added,
     Removed,
     Replaced,
+    Setting,
 }
 
-internal sealed record Change(ChangeKind Kind, Entity Entity, Entity? Replacement, int Index);
+internal sealed record Change(ChangeKind Kind, Entity Entity, Entity? Replacement, int Index)
+{
+    public Action? Apply { get; init; }
+    public Action? Revert { get; init; }
+}
 
 /// <summary>Operazione annullabile: il nome del comando e le modifiche nell'ordine in cui sono avvenute.</summary>
 internal sealed record UndoUnit(string Name, IReadOnlyList<Change> Changes);
@@ -89,10 +104,19 @@ public sealed class UndoHistory
             return null;
         }
 
+        Revert(unit.Changes);
+        _redo.Push(unit);
+        _document.RaiseChanged();
+        return unit.Name;
+    }
+
+    /// <summary>Riporta il modello a prima delle modifiche, dall'ultima alla prima.</summary>
+    internal void Revert(IReadOnlyList<Change> changes)
+    {
         var model = _document.ModelSpace;
-        for (var i = unit.Changes.Count - 1; i >= 0; i--)
+        for (var i = changes.Count - 1; i >= 0; i--)
         {
-            var change = unit.Changes[i];
+            var change = changes[i];
             switch (change.Kind)
             {
                 case ChangeKind.Added:
@@ -104,12 +128,12 @@ public sealed class UndoHistory
                 case ChangeKind.Replaced:
                     model[change.Index] = change.Entity;
                     break;
+                case ChangeKind.Setting:
+                    change.Revert!();
+                    break;
             }
         }
 
-        _redo.Push(unit);
-        _document.RaiseChanged();
-        return unit.Name;
     }
 
     /// <summary>Ripete l'ultima operazione annullata e ne restituisce il nome, o null se non c'è nulla da ripetere.</summary>
@@ -133,6 +157,9 @@ public sealed class UndoHistory
                     break;
                 case ChangeKind.Replaced:
                     model[change.Index] = change.Replacement!;
+                    break;
+                case ChangeKind.Setting:
+                    change.Apply!();
                     break;
             }
         }

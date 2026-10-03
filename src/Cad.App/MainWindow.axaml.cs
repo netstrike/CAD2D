@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         CommandBox.AddHandler(KeyDownEvent, OnCommandBoxKeyDown, RoutingStrategies.Tunnel);
 
+        DrawingScaleButton.Click += (_, _) => RunUiCommand("DLGSCALA");
         InitializeDraftingToggles();
         InitializeQuickInput();
         InitializeCompletion();
@@ -145,7 +146,7 @@ public partial class MainWindow : Window
                 GroupToggle.IsChecked = GroupToggle.IsChecked != true;
                 AppendHistory(GroupToggle.IsChecked == true ? "<Selezione dei gruppi attiva>" : "<Selezione dei gruppi disattivata>");
                 break;
-            case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "DLGSTILETESTO" or "OPZIONI":
+            case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "DLGSTILETESTO" or "OPZIONI" or "DLGSCALA" or "DLGIMMAGINE":
                 ShowDialogCommand(command);
                 return;
             case "TEMA":
@@ -283,6 +284,39 @@ public partial class MainWindow : Window
                 break;
             }
 
+            case "DLGSCALA":
+            {
+                var dialog = new DrawingScaleDialog(editor.Document);
+                await dialog.ShowDialog(this);
+                if (dialog.Accepted && dialog.Scale is { } scale)
+                {
+                    if (dialog.Resize)
+                    {
+                        DrawingScaleCommands.Resize(editor, scale, dialog.BasePoint);
+                    }
+                    else
+                    {
+                        DrawingScaleCommands.Assign(editor, scale);
+                    }
+
+                    AppendHistory($"Scala del disegno: {CadDocument.FormatScale(editor.Document.DrawingScale)}.");
+                }
+
+                break;
+            }
+
+            case "DLGIMMAGINE":
+            {
+                var dialog = new ImageDialog(StorageProvider);
+                await dialog.ShowDialog(this);
+                if (dialog.Accepted)
+                {
+                    AttachImage(dialog.FilePath, dialog.ImageOpacity);
+                }
+
+                break;
+            }
+
             case "OPZIONI":
             {
                 var dialog = new OptionsDialog(editor, () => _snapModes, SetSnapModes, AppTheme.IsLight, SetTheme);
@@ -414,7 +448,7 @@ public partial class MainWindow : Window
         else
         {
             SetDocument(new CadDocument());
-            StatusText.Text = "File > Apri (Ctrl+O) oppure trascina qui un file DXF";
+            StatusText.Text = "File > Apri (Ctrl+O) oppure trascina qui un file DXF o un'immagine da ricalcare";
         }
     }
 
@@ -473,9 +507,29 @@ public partial class MainWindow : Window
         Avalonia.Threading.Dispatcher.UIThread.Post(() => RefreshLayers());
     }
 
+    /// <summary>Avvia IMMAGINE con il file già scelto: resta da indicare l'angolo e la larghezza.</summary>
+    private void AttachImage(string path, double opacity)
+    {
+        if (_editor is not { } editor)
+        {
+            return;
+        }
+
+        editor.RunCommand("IMMAGINE");
+        editor.SubmitText(path);
+        if (Math.Abs(opacity - 50) > 0.01)
+        {
+            editor.SubmitText("Opacità");
+            editor.SubmitText(opacity.ToString(CultureInfo.InvariantCulture));
+        }
+
+        CommandBox.Focus();
+    }
+
     private void UpdateTitle()
     {
         var document = _editor?.Document;
+        DrawingScaleButton.Content = document is null ? "1:1" : CadDocument.FormatScale(document.DrawingScale);
         var name = document?.FilePath is { } path ? Path.GetFileName(path) : "Senza nome";
         Title = $"CAD2D - {name}{(document?.IsModified == true ? " *" : "")}";
     }
@@ -670,6 +724,13 @@ public partial class MainWindow : Window
 #pragma warning disable CS0618 // API di drag and drop ancora valida in Avalonia 11.
         var file = e.Data.GetFiles()?.FirstOrDefault();
 #pragma warning restore CS0618
+        if (file?.TryGetLocalPath() is { } image && ImageEntity.ReadPixelSize(image) is not null)
+        {
+            // Un'immagine trascinata nel disegno si inserisce da ricalcare; un DXF si apre.
+            AttachImage(image, 50);
+            return;
+        }
+
         if (file?.TryGetLocalPath() is { } path && await ConfirmDiscardAsync())
         {
             await OpenAsync(path);

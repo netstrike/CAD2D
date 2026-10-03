@@ -95,6 +95,7 @@ public static class PropertySheet
         HatchEntity => "Tratteggio",
         SolidEntity => "Solido",
         PointEntity => "Punto",
+        ImageEntity => "Immagine",
         _ => entity.GetType().Name.Replace("Entity", "", StringComparison.Ordinal),
     };
 
@@ -231,6 +232,7 @@ public static class PropertySheet
         LeaderEntity => LeaderDefinitions(),
         InsertEntity => InsertDefinitions(),
         HatchEntity => HatchDefinitions(),
+        ImageEntity => ImageDefinitions(),
         _ => [],
     };
 
@@ -352,7 +354,7 @@ public static class PropertySheet
         });
         yield return new(Geometry, "Misura", PropertyKind.ReadOnly, e => ((DimensionEntity)e).Kind == DimensionKind.Angular
             ? Format(((DimensionEntity)e).Measurement) + "°"
-            : Format(((DimensionEntity)e).Measurement));
+            : Format(((DimensionEntity)e).Measurement * ((DimensionEntity)e).Style.LinearFactor));
         yield return new(Content, "Testo", PropertyKind.Text, e => ((DimensionEntity)e).TextOverride ?? "<>",
             (e, v) =>
             {
@@ -372,6 +374,22 @@ public static class PropertySheet
             (e, v) => v == Yes || v == No ? Detached<LeaderEntity>(c => c.HasArrow = v == Yes)(e, v) : null,
             _ => [Yes, No]);
         yield return new(Geometry, "Stile di quota", PropertyKind.ReadOnly, e => ((LeaderEntity)e).Style.Name);
+    }
+
+    private static IEnumerable<PropertyDefinition> ImageDefinitions()
+    {
+        yield return new(Geometry, "File", PropertyKind.ReadOnly, e => ((ImageEntity)e).Path);
+        foreach (var d in Point<ImageEntity>("Angolo", i => i.Corner, (i, p) => MoveTo(i, i.Corner, p)))
+        {
+            yield return d;
+        }
+
+        yield return new(Geometry, "Larghezza", PropertyKind.Number, e => Format(((ImageEntity)e).U.Length),
+            Number<ImageEntity>((i, v) => i.Transformed(Matrix2D.Scaling(v / i.U.Length, i.Corner)), v => v > 0));
+        yield return new(Geometry, "Altezza", PropertyKind.ReadOnly, e => Format(((ImageEntity)e).V.Length));
+        yield return new(Geometry, "Pixel", PropertyKind.ReadOnly, e => $"{((ImageEntity)e).PixelWidth} × {((ImageEntity)e).PixelHeight}");
+        yield return new(Geometry, "Opacità %", PropertyKind.Number, e => Format(Math.Round(((ImageEntity)e).Opacity * 100)),
+            Number<ImageEntity>((i, v) => Detached<ImageEntity>(c => c.Opacity = v / 100)(i, ""), v => v is >= 10 and <= 100));
     }
 
     private static IEnumerable<PropertyDefinition> InsertDefinitions()

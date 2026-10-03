@@ -204,6 +204,15 @@ public sealed class Ribbon : TabControl
                 new("INSERISCI", "Inserisci", "Inserisce un blocco", Large: true),
                 new("ESPLODI", "Esplodi", "Scompone un blocco nei suoi oggetti", Large: true),
             ]),
+            new("Immagini",
+            [
+                new("DLGIMMAGINE", "Immagine", "Inserisce un'immagine (PNG, JPG, BMP) da ricalcare, semitrasparente e dietro al disegno", Large: true, Icon: "IMMAGINE"),
+                new("CALIBRA", "Calibra", "Porta in scala un'immagine: due punti e la loro distanza reale", Large: true),
+            ]),
+            new("Scala",
+            [
+                new("DLGSCALA", "Scala disegno", "Scala del disegno: assegna (quote invariate) o ridimensiona dalla scala corrente", Large: true, Icon: "SCALADISEGNO"),
+            ]),
         ]),
         new("Annota",
         [

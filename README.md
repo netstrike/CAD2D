@@ -30,6 +30,11 @@ dotnet run --project tools/Cad.DxfCheck -- C:\disegni   # prova tutti i DXF di u
 
 ## Stato
 
+Fase 3.7 (scala del disegno e immagini): SCALADISEGNO assegna una scala (1:50, 2:1...) lasciando misure e quote
+come sono, oppure ridimensiona il disegno dalla scala corrente mantenendo nelle quote le misure reali. IMMAGINE
+inserisce una foto o una scansione semitrasparente dietro al disegno per ricalcarla; CALIBRA la porta in scala.
+La scala corrente è nella barra di stato. Prova: `samples/pianta.png`, con la quota di riferimento di 5 m.
+
 Fase 3.6 (annotazioni e gruppi): gruppi di oggetti che si selezionano insieme, direttrici con testo, quote in serie,
 da linea di base, a coordinata e di lunghezza d'arco, segni di centro e assi, stili di testo, tabelle, tolleranze
 geometriche e nuvole di revisione, tutti salvati nel DXF. Scheda Annota della barra multifunzione riorganizzata.
@@ -102,6 +107,26 @@ Nei testi `%%c`, `%%d` e `%%p` diventano Ø, ° e ±.
 
 Direttrici con testo, tabelle, tolleranze e segni di centro formano un gruppo: un clic su una parte seleziona tutto.
 L'interruttore GRUPPI nella barra di stato (Ctrl+Maiusc+A) permette di selezionare le singole parti.
+
+### Scala e immagini
+
+| Comando | Alias | |
+| --- | --- | --- |
+| SCALADISEGNO | SD, DRAWINGSCALE | Assegna o Ridimensiona, poi la scala (`1:50`, `2:1`, `1/20`); anche dalla barra di stato o Inserisci > Scala |
+| IMMAGINE | IAT, IMAGEATTACH | file PNG, JPG, BMP o GIF, angolo in basso a sinistra, larghezza; opzione Opacità (predefinita 50%) |
+| CALIBRA | CAL, CALIBRATE | due punti sull'immagine e la loro distanza reale: l'immagine si scala attorno al primo punto |
+
+Con **Assegna** la geometria resta in misura reale e le quote non cambiano; testi, frecce, tabelle e tipi di linea si
+ingrandiscono (o rimpiccioliscono) perché sulla carta abbiano sempre la stessa misura. È il modo giusto per un disegno
+fatto in millimetri reali che va stampato in scala. Con **Ridimensiona** il disegno si scala attorno al punto base
+dalla scala corrente alla nuova (da 1:1 a 1:2 diventa metà) e le quote continuano a mostrare le misure reali grazie
+al fattore delle misure dello stile (DIMLFAC); testi e annotazioni restano della stessa misura. Entrambi si annullano
+con un solo ANNULLA e la scala si salva nel DXF con lo stile di quota corrente.
+
+Le immagini restano collegate al file (non copiate nel disegno) e vanno sul layer IMMAGINI: bloccalo per non spostarle
+mentre ricalchi, spegnilo per nasconderle. Si possono anche trascinare nella finestra. Nel DXF sono entità IMAGE, che
+gli altri CAD aprono; se disegno e immagine si spostano insieme in un'altra cartella, l'immagine si ritrova. Opacità e
+larghezza si cambiano nella palette Proprietà.
 
 ### Proprietà e layer
 

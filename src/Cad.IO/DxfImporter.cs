@@ -38,7 +38,28 @@ public static class DxfImporter
         using var stream = File.OpenRead(path);
         var result = Load(stream);
         result.Document.FilePath = path;
+        ResolveImagePaths(result.Document, Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
         return result;
+    }
+
+    /// <summary>
+    /// Le immagini collegate con un percorso relativo, o spostate insieme al disegno, si cercano nella cartella del DXF.
+    /// </summary>
+    private static void ResolveImagePaths(CadDocument document, string folder)
+    {
+        foreach (var image in document.ModelSpace.OfType<ImageEntity>())
+        {
+            if (Path.IsPathRooted(image.Path) && File.Exists(image.Path))
+            {
+                continue;
+            }
+
+            string[] candidates = [Path.Combine(folder, image.Path), Path.Combine(folder, Path.GetFileName(image.Path.Replace('\\', '/')))];
+            if (candidates.FirstOrDefault(File.Exists) is { } found)
+            {
+                image.Path = Path.GetFullPath(found);
+            }
+        }
     }
 
     public static ImportResult Load(Stream stream)
@@ -63,6 +84,7 @@ public static class DxfImporter
         converter.ConvertLinetypes(source);
         converter.ConvertLayers(source);
         converter.ConvertTextStyles(source);
+        converter.ConvertDimensionStyles(source);
         var converted = new Dictionary<Acad.Entities.Entity, Entity>(ReferenceEqualityComparer.Instance);
         foreach (var entity in source.Entities)
         {
@@ -336,6 +358,16 @@ public static class DxfImporter
                 case AcadEntities.Hatch hatch:
                     return ConvertHatch(hatch, layer);
 
+                case AcadEntities.RasterImage { Definition: { } definition } image when image.Size.X >= 1 && image.Size.Y >= 1:
+                {
+                    var width = (int)Math.Round(image.Size.X);
+                    var height = (int)Math.Round(image.Size.Y);
+                    return new ImageEntity(layer, definition.FileName ?? "", ToVector(image.InsertPoint), ToVector(image.UVector) * width, ToVector(image.VVector) * height, width, height)
+                    {
+                        Opacity = Math.Clamp(1 - image.Fade / 100.0, 0.1, 1),
+                    };
+                }
+
                 default:
                     return null;
             }
@@ -412,6 +444,24 @@ public static class DxfImporter
             return result;
         }
 
+        /// <summary>Stili di quota del file; quello corrente porta la scala del disegno.</summary>
+        public void ConvertDimensionStyles(Acad.CadDocument source)
+        {
+            foreach (var style in source.DimensionStyles)
+            {
+                if (!string.IsNullOrEmpty(style.Name))
+                {
+                    ConvertDimensionStyle(style);
+                }
+            }
+
+            if (source.Header.CurrentDimensionStyleName is { Length: > 0 } current &&
+                Document.DimensionStyles.FirstOrDefault(s => s.Name.Equals(current, StringComparison.OrdinalIgnoreCase)) is { } found)
+            {
+                Document.CurrentDimensionStyle = found;
+            }
+        }
+
         private DimensionStyle ConvertDimensionStyle(Acad.Tables.DimensionStyle? source)
         {
             if (source is null)
@@ -431,6 +481,7 @@ public static class DxfImporter
                 style.Decimals = source.DecimalPlaces;
                 style.DecimalSeparator = source.DecimalSeparator == '\0' ? '.' : source.DecimalSeparator;
                 style.Scale = source.ScaleFactor > 0 ? source.ScaleFactor : 1;
+                style.LinearFactor = source.LinearScaleFactor > 0 ? source.LinearScaleFactor : 1;
                 style.BaselineSpacing = source.DimensionLineIncrement > 0 ? source.DimensionLineIncrement : style.BaselineSpacing;
             }
 

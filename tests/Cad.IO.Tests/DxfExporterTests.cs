@@ -212,6 +212,57 @@ public sealed class DxfDraftingRoundTripTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     [Fact]
+    public void Drawing_scale_survives_save_and_reload()
+    {
+        var document = new CadDocument();
+        var layer = document.GetOrAddLayer("0");
+        var style = document.GetOrAddDimensionStyle("Tavola");
+        style.Scale = 2;
+        style.LinearFactor = 5;
+        document.CurrentDimensionStyle = style;
+        document.Edit("test", e => e.Add(new LineEntity(layer, Vector2.Zero, new Vector2(10, 0))));
+
+        var path = Path.Combine(_folder, "scala.dxf");
+        DxfExporter.Save(document, path);
+        var reloaded = DxfImporter.Load(path).Document;
+        Assert.Equal("Tavola", reloaded.CurrentDimensionStyle.Name);
+        Assert.Equal(5, reloaded.CurrentDimensionStyle.LinearFactor, 9);
+        Assert.Equal(10, reloaded.DrawingScale, 9);
+    }
+
+    [Fact]
+    public void Images_survive_save_and_reload_and_are_found_next_to_the_drawing()
+    {
+        var picture = Path.Combine(_folder, "rilievo.png");
+        var bytes = new byte[33];
+        new byte[] { 0x89, (byte)'P', (byte)'N', (byte)'G', 13, 10, 26, 10, 0, 0, 0, 13, (byte)'I', (byte)'H', (byte)'D', (byte)'R', 0, 0, 1, 0x90, 0, 0, 0, 0xC8 }.CopyTo(bytes, 0);
+        File.WriteAllBytes(picture, bytes);
+
+        var document = new CadDocument();
+        var layer = document.GetOrAddLayer("IMMAGINI");
+        document.Edit("test", e => e.Add(new ImageEntity(layer, picture, new Vector2(10, 5), new Vector2(0, 400), new Vector2(-200, 0), 400, 200) { Opacity = 0.4 }));
+        var path = Path.Combine(_folder, "ricalco.dxf");
+        DxfExporter.Save(document, path);
+
+        var image = Assert.Single(DxfImporter.Load(path).Document.ModelSpace.OfType<ImageEntity>());
+        Assert.Equal(picture, image.Path);
+        Assert.Equal("IMMAGINI", image.Layer.Name);
+        Assert.Equal(new Vector2(10, 5), image.Corner);
+        Assert.True(image.U.IsAlmostEqual(new Vector2(0, 400)));
+        Assert.True(image.V.IsAlmostEqual(new Vector2(-200, 0)));
+        Assert.Equal((400, 200), (image.PixelWidth, image.PixelHeight));
+        Assert.Equal(0.4, image.Opacity, 9);
+
+        // Disegno e immagine spostati insieme in un'altra cartella: l'immagine si ritrova.
+        var moved = Directory.CreateDirectory(Path.Combine(_folder, "copia")).FullName;
+        File.Copy(path, Path.Combine(moved, "ricalco.dxf"));
+        File.Copy(picture, Path.Combine(moved, "rilievo.png"));
+        File.Delete(picture);
+        var relocated = Assert.Single(DxfImporter.Load(Path.Combine(moved, "ricalco.dxf")).Document.ModelSpace.OfType<ImageEntity>());
+        Assert.Equal(Path.Combine(moved, "rilievo.png"), relocated.Path);
+    }
+
+    [Fact]
     public void Groups_survive_save_and_reload()
     {
         var document = new CadDocument();

@@ -68,6 +68,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
 
         DrawGrid(canvas);
         DrawOriginMarker(canvas);
+        DrawImages(canvas);
         DrawPaths(canvas);
         DrawPoints(canvas);
         DrawTexts(canvas);
@@ -108,6 +109,61 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
         }
 
         canvas.Restore();
+    }
+
+    /// <summary>Immagini decodificate una volta per file; null se il file manca o non si legge (resta la cornice).</summary>
+    private static readonly Dictionary<string, (DateTime Modified, SKImage? Image)> ImageCache = new(StringComparer.OrdinalIgnoreCase);
+
+    private static SKImage? LoadImage(string path)
+    {
+        var modified = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+        lock (ImageCache)
+        {
+            if (ImageCache.TryGetValue(path, out var cached) && cached.Modified == modified)
+            {
+                return cached.Image;
+            }
+
+            SKImage? image = null;
+            try
+            {
+                if (modified != DateTime.MinValue)
+                {
+                    using var data = SKData.Create(path);
+                    image = data is null ? null : SKImage.FromEncodedData(data);
+                }
+            }
+            catch (IOException)
+            {
+            }
+
+            cached.Image?.Dispose();
+            ImageCache[path] = (modified, image);
+            return image;
+        }
+    }
+
+    private void DrawImages(SKCanvas canvas)
+    {
+        using var paint = new SKPaint { IsAntialias = true, FilterQuality = SKFilterQuality.Medium };
+        foreach (var item in geometry.Scene.Images)
+        {
+            if (!visibleWorld.Intersects(item.Bounds) || LoadImage(item.Path) is not { } image)
+            {
+                continue;
+            }
+
+            var m = item.PixelToWorld(image.Width, image.Height) * worldToScreen;
+            var matrix = new SKMatrix(
+                (float)m.M11, (float)m.M21, (float)m.OffsetX,
+                (float)m.M12, (float)m.M22, (float)m.OffsetY,
+                0, 0, 1);
+            paint.Color = SKColors.White.WithAlpha((byte)Math.Round(Math.Clamp(item.Opacity, 0, 1) * 255));
+            canvas.Save();
+            canvas.Concat(ref matrix);
+            canvas.DrawImage(image, 0, 0, paint);
+            canvas.Restore();
+        }
     }
 
     private void DrawPoints(SKCanvas canvas)

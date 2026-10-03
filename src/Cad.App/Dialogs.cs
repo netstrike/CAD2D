@@ -391,3 +391,115 @@ public sealed class TextStyleDialog : FormDialog
     private static bool TryParse(string? text, out double value) =>
         double.TryParse((text ?? string.Empty).Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
 }
+
+/// <summary>
+/// Scala del disegno: la nuova scala e il modo. "Assegna" lascia le misure com'erano e adatta testi, frecce e tipi di
+/// linea; "Ridimensiona" rimpicciolisce o ingrandisce il disegno e le quote continuano a mostrare le misure reali.
+/// </summary>
+public sealed class DrawingScaleDialog : FormDialog
+{
+    private static readonly string[] CommonScales = ["1:1", "1:2", "1:5", "1:10", "1:20", "1:50", "1:100", "1:200", "1:500", "2:1", "5:1", "10:1"];
+
+    private readonly RadioButton _assign = new() { Content = "Assegna: quote e misure invariate, si adattano testi e frecce", GroupName = "modo", IsChecked = true };
+    private readonly RadioButton _resize = new() { Content = "Ridimensiona: scala il disegno, le quote restano reali", GroupName = "modo" };
+
+    public DrawingScaleDialog(CadDocument document) : base("Scala del disegno", 520)
+    {
+        var current = CadDocument.FormatScale(document.DrawingScale);
+        Section($"Scala corrente: {current}");
+        var scale = new AutoCompleteBox { Text = current, ItemsSource = CommonScales, FilterMode = AutoCompleteFilterMode.StartsWith, MinimumPrefixLength = 0, MinHeight = 26 };
+        Row("Nuova scala", scale);
+
+        Section("Modo");
+        Add(_assign);
+        Add(_resize);
+        var x = new TextBox { Text = "0", MinHeight = 26, Width = 100 };
+        var y = new TextBox { Text = "0", MinHeight = 26, Width = 100, Margin = new Thickness(8, 0, 0, 0) };
+        var basePanel = new StackPanel { Orientation = Orientation.Horizontal, Children = { x, y } };
+        Row("Punto base (X, Y)", basePanel);
+        basePanel.IsEnabled = false;
+        _resize.IsCheckedChanged += (_, _) => basePanel.IsEnabled = _resize.IsChecked == true;
+
+        OnAccept(
+            () =>
+            {
+                var parsed = CadDocument.ParseScale(scale.Text ?? "");
+                scale.BorderBrush = parsed is null ? Brushes.IndianRed : null;
+                var okX = TryParse(x.Text, out var bx);
+                var okY = TryParse(y.Text, out var by);
+                MarkError(x, okX);
+                MarkError(y, okY);
+                Scale = parsed;
+                BasePoint = new Vector2(bx, by);
+                return parsed is not null && okX && okY;
+            },
+            () => Resize = _resize.IsChecked == true);
+    }
+
+    /// <summary>Nuova scala come rapporto reale:carta (2 = 1:2).</summary>
+    public double? Scale { get; private set; }
+    public bool Resize { get; private set; }
+    public Vector2 BasePoint { get; private set; }
+
+    private static bool TryParse(string? text, out double value) =>
+        double.TryParse((text ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
+}
+
+/// <summary>Immagine da ricalcare: il file e l'opacità; angolo e larghezza si indicano poi nel disegno.</summary>
+public sealed class ImageDialog : FormDialog
+{
+    private static readonly Avalonia.Platform.Storage.FilePickerFileType Images = new("Immagini") { Patterns = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif"] };
+
+    public ImageDialog(Avalonia.Platform.Storage.IStorageProvider storage) : base("Inserisci immagine", 560)
+    {
+        Section("File");
+        var path = new TextBox { MinHeight = 26, Watermark = "Percorso dell'immagine" };
+        var browse = new Button { Content = "Sfoglia...", Margin = new Thickness(6, 0, 0, 0) };
+        var info = new TextBlock { Foreground = Brushes.Gray, FontSize = 11.5 };
+        browse.Click += async (_, _) =>
+        {
+            var files = await storage.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = "Scegli l'immagine da ricalcare",
+                AllowMultiple = false,
+                FileTypeFilter = [Images],
+            });
+            if (files.Count > 0 && Avalonia.Platform.Storage.StorageProviderExtensions.TryGetLocalPath(files[0]) is { } local)
+            {
+                path.Text = local;
+            }
+        };
+        path.TextChanged += (_, _) =>
+            info.Text = ImageEntity.ReadPixelSize((path.Text ?? "").Trim().Trim('"')) is { } size ? $"{size.Width} × {size.Height} pixel" : "";
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        row.Children.Add(path);
+        Grid.SetColumn(browse, 1);
+        row.Children.Add(browse);
+        Row("Immagine", row);
+        Row("", info);
+
+        Section("Aspetto");
+        Number("Opacità %", 50, v => v is >= 10 and <= 100, v => ImageOpacity = v);
+        Add(new TextBlock
+        {
+            Text = "L'immagine va sul layer IMMAGINI, dietro al disegno: bloccalo per non spostarla mentre ricalchi.\nPoi indica l'angolo in basso a sinistra e la larghezza; con CALIBRA la porti in scala.",
+            Foreground = Brushes.Gray,
+            FontSize = 11.5,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 6, 0, 0),
+        });
+
+        OnAccept(
+            () =>
+            {
+                FilePath = (path.Text ?? "").Trim().Trim('"');
+                var ok = ImageEntity.ReadPixelSize(FilePath) is not null;
+                MarkError(path, ok);
+                return ok;
+            },
+            () => { });
+    }
+
+    public string FilePath { get; private set; } = "";
+    public double ImageOpacity { get; private set; } = 50;
+}

@@ -120,6 +120,13 @@ public static class EntityGeometry
                 }
 
                 break;
+            case ImageEntity image:
+                for (var i = 0; i < 4; i++)
+                {
+                    yield return new SegmentPrimitive(new Segment2D(image.Corners[i], image.Corners[(i + 1) % 4]));
+                }
+
+                break;
             case HatchEntity hatch:
                 foreach (var loop in hatch.Loops)
                 {

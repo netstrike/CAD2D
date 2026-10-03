@@ -56,13 +56,14 @@ public static class SceneBuilder
         public List<RenderPoint> Points { get; } = [];
         public int EntityCount { get; private set; }
         public Dictionary<CadColor, FillBatch> Fills { get; } = [];
+        public List<RenderImage> Images { get; } = [];
         public CadColor? ColorOverride { get; init; }
         public bool IgnoreVisibility { get; init; }
         public bool IgnoreLinetypes { get; init; }
         public bool HatchOutlinesOnly { get; init; }
         public double LinetypeScale { get; init; } = 1;
 
-        public Scene ToScene() => new([.. Batches.Values], Texts, Points, EntityCount, [.. Fills.Values]);
+        public Scene ToScene() => new([.. Batches.Values], Texts, Points, EntityCount, [.. Fills.Values], Images);
 
         public void Add(Entity entity, Context context)
         {
@@ -157,6 +158,15 @@ public static class SceneBuilder
                     break;
                 case TextEntity text:
                     AddText(text, m, color);
+                    break;
+                case ImageEntity image:
+                    // Le anteprime e la selezione mostrano solo la cornice.
+                    if (ColorOverride is null)
+                    {
+                        Images.Add(new RenderImage(image.Path, m.Transform(image.Corner), m.TransformVector(image.U), m.TransformVector(image.V), image.Opacity));
+                    }
+
+                    AddCurve(color, [.. image.Corners.Select(m.Transform), m.Transform(image.Corner)], null, 1);
                     break;
             }
         }

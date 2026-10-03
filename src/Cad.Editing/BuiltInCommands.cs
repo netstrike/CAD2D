@@ -27,6 +27,8 @@ internal static class BuiltInCommands
         ClipboardCommands.Register(editor);
         GroupCommands.Register(editor);
         AnnotationTools.Register(editor);
+        DrawingScaleCommands.Register(editor);
+        ImageCommands.Register(editor);
         AidCommands.Register(editor);
         MeasureCommands.Register(editor);
     }

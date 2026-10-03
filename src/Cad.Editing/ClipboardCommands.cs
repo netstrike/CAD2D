@@ -201,6 +201,7 @@ public static class ClipboardCommands
             result.DecimalSeparator = style.DecimalSeparator;
             result.Scale = style.Scale;
             result.BaselineSpacing = style.BaselineSpacing;
+            result.LinearFactor = style.LinearFactor;
         }
 
         return result;

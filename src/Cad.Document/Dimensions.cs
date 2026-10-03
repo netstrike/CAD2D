@@ -46,6 +46,12 @@ public sealed class DimensionStyle(string name)
     /// <summary>Distanza tra le linee di quota delle quote da linea di base (DIMDLI).</summary>
     public double BaselineSpacing { get; set; } = 3.75;
 
+    /// <summary>
+    /// Fattore che moltiplica le misure lineari mostrate (DIMLFAC): un disegno rimpicciolito a 1:2 lo ha a 2, così le
+    /// quote mostrano le misure reali. Gli angoli non cambiano.
+    /// </summary>
+    public double LinearFactor { get; set; } = 1;
+
     /// <summary>Fattore globale che moltiplica tutte le grandezze (DIMSCALE): utile per disegni in scala.</summary>
     public double Scale { get; set; } = 1;
 
@@ -125,13 +131,14 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
     {
         get
         {
+            var length = Measurement * Style.LinearFactor;
             var value = Kind switch
             {
                 DimensionKind.Angular => Style.FormatAngle(Measurement),
-                DimensionKind.Radius => "R" + Style.FormatLength(Measurement),
-                DimensionKind.Diameter => "Ø" + Style.FormatLength(Measurement),
-                DimensionKind.ArcLength => ArcSymbol + Style.FormatLength(Measurement),
-                _ => Style.FormatLength(Measurement),
+                DimensionKind.Radius => "R" + Style.FormatLength(length),
+                DimensionKind.Diameter => "Ø" + Style.FormatLength(length),
+                DimensionKind.ArcLength => ArcSymbol + Style.FormatLength(length),
+                _ => Style.FormatLength(length),
             };
             return TextOverride is null ? value : TextOverride.Replace("<>", value, StringComparison.Ordinal);
         }

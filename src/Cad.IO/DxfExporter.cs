@@ -104,6 +104,25 @@ public static class DxfExporter
 
         SyncGroups(document, target);
         target.Header.CurrentTextStyleName = document.CurrentTextStyle.Name;
+
+        // Tutti gli stili di quota, anche quelli non usati: lo stile corrente porta la scala del disegno.
+        foreach (var style in document.DimensionStyles)
+        {
+            blocks.WriteDimensionStyle(style);
+        }
+
+        target.Header.CurrentDimensionStyleName = document.CurrentDimensionStyle.Name;
+
+        // Senza il reattore IMAGEDEF_REACTOR ACadSharp scarta le immagini al salvataggio: si rigenerano tutti.
+        foreach (var definition in target.ImageDefinitions)
+        {
+            foreach (var reactor in definition.Reactors.OfType<Acad.Objects.ImageDefinitionReactor>().ToList())
+            {
+                definition.RemoveReactor(reactor);
+            }
+        }
+
+        target.UpdateImageReactors();
         return target;
     }
 
@@ -452,6 +471,7 @@ public static class DxfExporter
                 DimensionEntity dimension => ConvertDimension(dimension),
                 LeaderEntity leader => ConvertLeader(leader),
                 HatchEntity hatch => ConvertHatch(hatch),
+                ImageEntity image => ConvertImage(image),
                 _ => null,
             };
 
@@ -612,6 +632,8 @@ public static class DxfExporter
             return acad;
         }
 
+        public void WriteDimensionStyle(DimensionStyle style) => GetDimensionStyle(style);
+
         private Acad.Tables.DimensionStyle GetDimensionStyle(DimensionStyle style)
         {
             if (!target.DimensionStyles.TryGetValue(style.Name, out var acad))
@@ -629,11 +651,45 @@ public static class DxfExporter
             acad.DecimalSeparator = style.DecimalSeparator;
             acad.ScaleFactor = style.Scale;
             acad.DimensionLineIncrement = style.BaselineSpacing;
+            acad.LinearScaleFactor = style.LinearFactor;
             acad.TextVerticalAlignment = Acad.Tables.DimensionTextVerticalAlignment.Above;
             acad.TextInsideHorizontal = false;
             acad.TextOutsideHorizontal = false;
             acad.ZeroHandling = Acad.Tables.ZeroHandling.SuppressDecimalTrailingZeroes;
             return acad;
+        }
+
+        /// <summary>
+        /// IMAGE del DXF: la definizione (IMAGEDEF) tiene il percorso del file, una per file; l'entità ha i vettori di un
+        /// pixel e la dissolvenza in percentuale.
+        /// </summary>
+        private AcadEntities.RasterImage ConvertImage(ImageEntity image)
+        {
+            var definition = target.ImageDefinitions.FirstOrDefault(d => string.Equals(d.FileName, image.Path, StringComparison.OrdinalIgnoreCase));
+            if (definition is null)
+            {
+                definition = new Acad.Objects.ImageDefinition(Path.GetFileNameWithoutExtension(image.Path) + $"_{target.ImageDefinitions.Count() + 1}")
+                {
+                    FileName = image.Path,
+                    Size = new CSMath.XY(image.PixelWidth, image.PixelHeight),
+                };
+                target.ImageDefinitions.Add(definition);
+            }
+
+            var result = new AcadEntities.RasterImage(definition)
+            {
+                InsertPoint = ToXyz(image.Corner),
+                UVector = ToXyz(image.U / image.PixelWidth),
+                VVector = ToXyz(image.V / image.PixelHeight),
+                Size = new CSMath.XY(image.PixelWidth, image.PixelHeight),
+                Fade = (byte)Math.Round((1 - image.Opacity) * 100),
+                Flags = AcadEntities.ImageDisplayFlags.ShowImage | AcadEntities.ImageDisplayFlags.ShowNotAlignedImage,
+            };
+
+            // Contorno di ritaglio rettangolare sull'immagine intera (in pixel, dal bordo dei pixel): obbligatorio nel DXF.
+            result.ClipBoundaryVertices.Add(new CSMath.XY(-0.5, -0.5));
+            result.ClipBoundaryVertices.Add(new CSMath.XY(image.PixelWidth - 0.5, image.PixelHeight - 0.5));
+            return result;
         }
 
         private static AcadEntities.Solid ConvertSolid(SolidEntity solid)

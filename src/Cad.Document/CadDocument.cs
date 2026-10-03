@@ -48,7 +48,17 @@ public sealed class CadDocument
     public void Edit(string name, Action<DocumentEditor> edit)
     {
         var changes = new List<Change>();
-        edit(new DocumentEditor(this, changes));
+        try
+        {
+            edit(new DocumentEditor(this, changes));
+        }
+        catch
+        {
+            // Un comando interrotto da un errore non lascia il disegno a metà.
+            History.Revert(changes);
+            throw;
+        }
+
         if (changes.Count == 0)
         {
             return;
@@ -114,6 +124,44 @@ public sealed class CadDocument
         }
 
         return style;
+    }
+
+    /// <summary>
+    /// Scala del disegno come rapporto tra misura reale e misura sulla carta (2 = 1:2, 0.5 = 2:1). Si ricava dallo stile
+    /// di quota corrente: la scala globale (annotazioni più grandi, disegno in misura reale) per il fattore delle misure
+    /// (disegno rimpicciolito, quote che mostrano le misure reali).
+    /// </summary>
+    public double DrawingScale => CurrentDimensionStyle.Scale * CurrentDimensionStyle.LinearFactor;
+
+    /// <summary>Scala scritta come negli altri CAD: "1:2", "1:1", "5:1".</summary>
+    public static string FormatScale(double scale)
+    {
+        static string Number(double v) => Math.Round(v, 4).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        return scale >= 1 ? $"1:{Number(scale)}" : $"{Number(1 / scale)}:1";
+    }
+
+    /// <summary>Legge "1:2", "2:1", "1/50" oppure un numero (2 = 1:2); null se non è una scala valida.</summary>
+    public static double? ParseScale(string text)
+    {
+        var parts = text.Trim().Replace(',', '.').Split(':', '/');
+        var numbers = new List<double>();
+        foreach (var part in parts)
+        {
+            if (!double.TryParse(part.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ||
+                !double.IsFinite(value) || value <= 0)
+            {
+                return null;
+            }
+
+            numbers.Add(value);
+        }
+
+        return numbers.Count switch
+        {
+            1 => numbers[0],
+            2 => numbers[1] / numbers[0],
+            _ => null,
+        };
     }
 
     public IEnumerable<TextStyle> TextStyles => _textStyles.Values;

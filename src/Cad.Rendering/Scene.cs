@@ -38,6 +38,16 @@ public sealed class FillBatch(CadColor color)
 
 public sealed record RenderPoint(Vector2 Position, CadColor Color);
 
+/// <summary>Immagine raster in coordinate mondo: angolo in basso a sinistra, lato inferiore e lato sinistro.</summary>
+public sealed record RenderImage(string Path, Vector2 Corner, Vector2 U, Vector2 V, double Opacity)
+{
+    public BoundingBox Bounds => BoundingBox.FromPoints([Corner, Corner + U, Corner + U + V, Corner + V]);
+
+    /// <summary>Da pixel dell'immagine (origine in alto a sinistra, y verso il basso) a coordinate mondo.</summary>
+    public Matrix2D PixelToWorld(int width, int height) =>
+        new(U.X / width, U.Y / width, -V.X / height, -V.Y / height, Corner.X + V.X, Corner.Y + V.Y);
+}
+
 /// <summary>
 /// Il disegno pronto per essere visualizzato: blocchi esplosi, colori risolti, curve approssimate, layer spenti esclusi.
 /// Si ricostruisce quando il documento o la visibilità dei layer cambiano; pan e zoom non lo toccano.
@@ -51,10 +61,12 @@ public sealed class Scene
         IReadOnlyList<RenderText> texts,
         IReadOnlyList<RenderPoint> points,
         int entityCount,
-        IReadOnlyList<FillBatch>? fills = null)
+        IReadOnlyList<FillBatch>? fills = null,
+        IReadOnlyList<RenderImage>? images = null)
     {
         Batches = batches;
         Fills = fills ?? [];
+        Images = images ?? [];
         Texts = texts;
         Points = points;
         EntityCount = entityCount;
@@ -77,8 +89,12 @@ public sealed class Scene
             }
         }
 
+        bounds = Images.Aggregate(bounds, (b, i) => b.Union(i.Bounds));
         Bounds = points.Aggregate(bounds, (b, p) => b.Union(p.Position));
     }
+
+    /// <summary>Immagini raster, disegnate dietro a tutto il resto.</summary>
+    public IReadOnlyList<RenderImage> Images { get; }
 
     public IReadOnlyList<FillBatch> Fills { get; }
 

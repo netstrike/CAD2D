@@ -284,7 +284,7 @@ public partial class MainWindow
         CompletionPopup.IsOpen = true;
     }
 
-    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER", "GESTORELAYER", "OPZIONI", "SELEZIONATUTTO", "SELGRUPPI", "TEMA", "DLGTRATTEGGIO", "DLGSTILEQUOTA", "DLGSTILETESTO"];
+    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER", "GESTORELAYER", "OPZIONI", "SELEZIONATUTTO", "SELGRUPPI", "TEMA", "DLGTRATTEGGIO", "DLGSTILEQUOTA", "DLGSTILETESTO", "DLGSCALA", "DLGIMMAGINE"];
 
     private void InitializeCompletion()
     {

@@ -14,6 +14,13 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{DynamicResource Cad.Subtle}" />
     </Style>
+    <Style Selector="Button.status">
+      <Setter Property="Padding" Value="8,1" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="MinHeight" Value="20" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Cad.Text2}" />
+    </Style>
     <Style Selector="ToggleButton.status:checked /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Cad.StatusOn}" />
       <Setter Property="Foreground" Value="{DynamicResource Cad.StatusOnText}" />
@@ -76,6 +83,9 @@
         <Separator />
         <MenuItem Header="Crea _blocco" Click="OnMenuCommand" Tag="BLOCCO" />
         <MenuItem Header="_Inserisci blocco" Click="OnMenuCommand" Tag="INSERISCI" />
+        <Separator />
+        <MenuItem Header="I_mmagine..." Click="OnMenuCommand" Tag="DLGIMMAGINE" />
+        <MenuItem Header="Ca_libra immagine" Click="OnMenuCommand" Tag="CALIBRA" />
       </MenuItem>
       <MenuItem Header="_Testo">
         <MenuItem Header="_Testo su una riga" Click="OnMenuCommand" Tag="TESTO" />
@@ -106,6 +116,7 @@
         <MenuItem Header="As_se" Click="OnMenuCommand" Tag="ASSE" />
         <Separator />
         <MenuItem Header="_Stile di quota..." Click="OnMenuCommand" Tag="DLGSTILEQUOTA" />
+        <MenuItem Header="Scala del _disegno..." Click="OnMenuCommand" Tag="DLGSCALA" />
       </MenuItem>
       <MenuItem x:Name="SnapMenu" Header="_Snap" />
       <MenuItem Header="_Vista">
@@ -139,6 +150,7 @@
         <TextBlock x:Name="SelectionText" Grid.Column="1" Margin="16,0" Foreground="{DynamicResource Cad.Text2}" VerticalAlignment="Center" FontSize="11.5" />
         <TextBlock x:Name="ScaleText" Grid.Column="2" Margin="0,0,16,0" Foreground="{DynamicResource Cad.Subtle}" VerticalAlignment="Center" FontSize="11.5" />
         <StackPanel x:Name="ToggleBar" Grid.Column="3" Orientation="Horizontal" Spacing="2" Margin="0,0,16,0">
+          <Button x:Name="DrawingScaleButton" Classes="status" Content="1:1" Margin="0,0,8,0" ToolTip.Tip="Scala del disegno. Clic: cambiala (SCALADISEGNO)." />
           <ToggleButton x:Name="GridSnapToggle" Classes="status" Content="AGGANCIO" ToolTip.Tip="Aggancio ai punti della griglia (F9)" />
           <ToggleButton x:Name="GridToggle" Classes="status" Content="GRIGLIA" ToolTip.Tip="Mostra la griglia (F7). Il passo si cambia con GRIGLIA." />
           <ToggleButton x:Name="OrthoToggle" Classes="status" Content="ORTHO" ToolTip.Tip="Ortogonale (F8)" />
