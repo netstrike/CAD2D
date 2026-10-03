@@ -268,6 +268,9 @@ public sealed class CadCanvas : Control
 
     private void OnEditorStateChanged(object? sender, EventArgs e) => RefreshOverlay();
 
+    /// <summary>Ridisegna la sovrapposizione dopo un cambio di impostazioni (griglia, tracciamento).</summary>
+    public void InvalidateOverlay() => RefreshOverlay();
+
     private void RefreshOverlay()
     {
         if (_editor is null)
@@ -304,7 +307,15 @@ public sealed class CadCanvas : Control
             ? SceneBuilder.BuildEntities([hovered], HighlightColor).Batches.SelectMany(b => b.Polylines).ToList()
             : [];
 
-        _overlay = new Overlay(highlight, grips, preview, rubberFrom, cursor, window, _pointerWorld is null ? null : _editor.CurrentSnap, cursor, hover);
+        var tracking = _pointerWorld is null ? null : _editor.CurrentTracking;
+        _overlay = new Overlay(highlight, grips, preview, rubberFrom, cursor, window, _pointerWorld is null ? null : _editor.CurrentSnap, cursor, hover)
+        {
+            TrackingLines = tracking?.Lines ?? [],
+            TrackingLabel = tracking?.Label,
+            TrackingPoint = tracking?.Point,
+            Acquired = [.. _editor.AcquiredPoints],
+            GridSpacing = _editor.GridVisible ? _editor.GridSpacing : 0,
+        };
         InvalidateVisual();
     }
 

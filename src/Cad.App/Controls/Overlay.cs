@@ -20,4 +20,15 @@ internal sealed record Overlay(
     IReadOnlyList<Vector2[]> Hover)
 {
     public static Overlay Empty { get; } = new([], [], [], null, null, null, null, null, []);
+
+    /// <summary>Guide del tracciamento polare e di allineamento, con la didascalia.</summary>
+    public IReadOnlyList<TrackingLine> TrackingLines { get; init; } = [];
+    public string? TrackingLabel { get; init; }
+    public Vector2? TrackingPoint { get; init; }
+
+    /// <summary>Punti acquisiti per ETrack, segnati con una piccola croce.</summary>
+    public IReadOnlyList<Vector2> Acquired { get; init; } = [];
+
+    /// <summary>Passo della griglia da disegnare; 0 = griglia spenta.</summary>
+    public double GridSpacing { get; init; }
 }

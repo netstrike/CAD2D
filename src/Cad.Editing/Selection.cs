@@ -102,12 +102,15 @@ public sealed class EntityLocator
     public IEnumerable<Entity> Overlapping(BoundingBox box) => Index.Query(box);
 
     /// <summary>L'entità più vicina al punto entro il raggio, o null.</summary>
-    public Entity? Pick(Vector2 point, double radius) => Near(point, radius)
+    public Entity? Pick(Vector2 point, double radius) => PickAll(point, radius).FirstOrDefault();
+
+    /// <summary>Tutte le entità entro il raggio, dalla più vicina: per scorrere quelle sovrapposte.</summary>
+    public IReadOnlyList<Entity> PickAll(Vector2 point, double radius) => Near(point, radius)
         .Select(e => (Entity: e, Distance: EntityGeometry.DistanceTo(e, point)))
         .Where(x => x.Distance <= radius)
         .OrderBy(x => x.Distance)
         .Select(x => x.Entity)
-        .FirstOrDefault();
+        .ToList();
 
     /// <summary>Selezione a finestra (solo entità interamente dentro) o interseca (anche quelle che toccano il bordo).</summary>
     public IEnumerable<Entity> InWindow(BoundingBox window, bool crossing) => Index.Query(window)

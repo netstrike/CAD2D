@@ -183,6 +183,13 @@ public sealed class Ribbon : TabControl
                 new("ESPLODI", "Esplodi", "Scompone blocchi, polilinee, quote"),
                 new("CANCELLA", "Cancella", "Cancella gli oggetti"),
             ]),
+            new("Appunti",
+            [
+                new("INCOLLACLIP", "Incolla", "Incolla gli oggetti degli appunti (Ctrl+V)", Large: true),
+                new("COPIACLIP", "Copia", "Copia negli appunti (Ctrl+C)"),
+                new("TAGLIACLIP", "Taglia", "Taglia negli appunti (Ctrl+X)"),
+                new("COPIABASE", "Con base", "Copia con punto base (Ctrl+Maiusc+C)"),
+            ]),
             new("Layer e proprietà",
             [
                 new("LAYER", "Layer", "Gestione dei layer dalla riga di comando", Large: true),
@@ -226,6 +233,11 @@ public sealed class Ribbon : TabControl
             [
                 new("ZOOMESTENSIONI", "Estensioni", "Mostra tutto il disegno", Large: true),
                 new("ZOOM", "Finestra", "Ingrandisce una finestra", Large: true),
+            ]),
+            new("Aiuti",
+            [
+                new("GRIGLIA", "Griglia", "Passo e accensione della griglia (F7, F9)", Large: true),
+                new("POLARE", "Polare", "Incremento del tracciamento polare (F10)", Large: true, Icon: "POLARE"),
             ]),
             new("Palette",
             [

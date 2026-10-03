@@ -109,8 +109,13 @@
         <TextBlock x:Name="SelectionText" Grid.Column="1" Margin="16,0" Foreground="#A0A0A0" VerticalAlignment="Center" FontSize="11.5" />
         <TextBlock x:Name="ScaleText" Grid.Column="2" Margin="0,0,16,0" Foreground="#808080" VerticalAlignment="Center" FontSize="11.5" />
         <StackPanel x:Name="ToggleBar" Grid.Column="3" Orientation="Horizontal" Spacing="2" Margin="0,0,16,0">
-          <ToggleButton x:Name="SnapToggle" Classes="status" Content="ESNAP" IsChecked="True" ToolTip.Tip="Snap agli oggetti (F3). Tasto destro: tipi di snap." />
+          <ToggleButton x:Name="GridSnapToggle" Classes="status" Content="AGGANCIO" ToolTip.Tip="Aggancio ai punti della griglia (F9)" />
+          <ToggleButton x:Name="GridToggle" Classes="status" Content="GRIGLIA" ToolTip.Tip="Mostra la griglia (F7). Il passo si cambia con GRIGLIA." />
           <ToggleButton x:Name="OrthoToggle" Classes="status" Content="ORTHO" ToolTip.Tip="Ortogonale (F8)" />
+          <ToggleButton x:Name="PolarToggle" Classes="status" Content="POLARE" IsChecked="True" ToolTip.Tip="Tracciamento polare (F10). Tasto destro: incremento angolare." />
+          <ToggleButton x:Name="SnapToggle" Classes="status" Content="ESNAP" IsChecked="True" ToolTip.Tip="Snap agli oggetti (F3). Tasto destro: tipi di snap." />
+          <ToggleButton x:Name="TrackToggle" Classes="status" Content="ETRACK" IsChecked="True" ToolTip.Tip="Tracciamento di allineamento (F11): fermati un attimo su uno snap per acquisirlo." />
+          <ToggleButton x:Name="QuickInputToggle" Classes="status" Content="QINPUT" IsChecked="True" ToolTip.Tip="Inserimento rapido vicino al cursore (F12). Tab blocca distanza e angolo." />
         </StackPanel>
         <TextBlock x:Name="CoordinatesText" Grid.Column="4" FontFamily="Consolas,monospace" VerticalAlignment="Center" MinWidth="190" TextAlignment="Right" FontSize="12" />
       </Grid>
@@ -120,8 +125,17 @@
     <Border DockPanel.Dock="Bottom" Background="#262626" BorderBrush="#3C3C3C" BorderThickness="0,1,0,0">
       <DockPanel>
         <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*" Margin="6,2,6,4">
-          <TextBlock x:Name="PromptText" Grid.Column="0" FontFamily="Consolas,monospace" VerticalAlignment="Center" Margin="0,0,8,0" Text="Comando:" />
+          <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+            <TextBlock x:Name="PromptText" FontFamily="Consolas,monospace" VerticalAlignment="Center" Text="Comando:" />
+            <!-- Opzioni del comando cliccabili, come in DraftSight. -->
+            <StackPanel x:Name="KeywordPanel" Orientation="Horizontal" Spacing="3" Margin="6,0,0,0" VerticalAlignment="Center" />
+          </StackPanel>
           <TextBox x:Name="CommandBox" Grid.Column="1" FontFamily="Consolas,monospace" MinHeight="26" Padding="4,2" />
+          <Popup x:Name="CompletionPopup" Grid.Column="1" PlacementTarget="{Binding #CommandBox}" Placement="TopEdgeAlignedLeft" IsLightDismissEnabled="False">
+            <Border Background="#2B2B2B" BorderBrush="#4F4F4F" BorderThickness="1" MinWidth="260">
+              <ListBox x:Name="CompletionList" MaxHeight="220" FontFamily="Consolas,monospace" FontSize="12" Background="Transparent" />
+            </Border>
+          </Popup>
         </Grid>
         <ScrollViewer x:Name="HistoryScroll" Height="72" Margin="6,4,6,0">
           <SelectableTextBlock x:Name="HistoryText" FontFamily="Consolas,monospace" Foreground="#A0A0A0" TextWrapping="Wrap" />
@@ -131,6 +145,22 @@
 
     <Grid x:Name="WorkArea" ColumnDefinitions="*,Auto,300">
       <controls:CadCanvas x:Name="Canvas" Grid.Column="0" />
+      <!-- Inserimento rapido: segue il cursore e mostra richiesta, testo scritto, distanza e angolo. -->
+      <Canvas x:Name="QuickInputLayer" Grid.Column="0" IsHitTestVisible="False" ClipToBounds="True">
+        <Border x:Name="QuickInputBox" IsVisible="False" Background="#E6303030" BorderBrush="#4FA3FF" BorderThickness="1" CornerRadius="2" Padding="6,3">
+          <StackPanel Spacing="2">
+            <TextBlock x:Name="QuickPrompt" FontSize="11.5" Foreground="#D0D0D0" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Border x:Name="QuickFirstBox" Background="#1E1E1E" BorderBrush="#5A5A5A" BorderThickness="1" Padding="4,1" MinWidth="70">
+                <TextBlock x:Name="QuickFirst" FontFamily="Consolas,monospace" FontSize="12" />
+              </Border>
+              <Border x:Name="QuickSecondBox" Background="#1E1E1E" BorderBrush="#5A5A5A" BorderThickness="1" Padding="4,1" MinWidth="60">
+                <TextBlock x:Name="QuickSecond" FontFamily="Consolas,monospace" FontSize="12" />
+              </Border>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Canvas>
       <GridSplitter x:Name="PaletteSplitter" Grid.Column="1" Width="4" Background="#3C3C3C" ResizeDirection="Columns" />
       <!-- Palette a destra, come in DraftSight: Proprietà e Layer. -->
       <DockPanel x:Name="PalettePanel" Grid.Column="2" Background="#2B2B2B">

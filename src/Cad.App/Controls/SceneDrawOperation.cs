@@ -30,6 +30,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
     private static readonly SKColor HighlightColor = new(0x4F, 0xA3, 0xFF);
     private static readonly SKColor GripColor = new(0x2F, 0x6F, 0xFF);
     private static readonly SKColor SnapColor = new(0xFF, 0xC0, 0x20);
+    private static readonly SKColor TrackingColor = new(0x60, 0xD0, 0x60);
     private static readonly SKColor CrosshairColor = new(0xC8, 0xC8, 0xC8);
     private static readonly SKTypeface TextTypeface = SKTypeface.FromFamilyName("Arial") ?? SKTypeface.Default;
     private static readonly SKTypeface LabelTypeface = SKTypeface.FromFamilyName("Segoe UI") ?? TextTypeface;
@@ -59,6 +60,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
         canvas.ClipRect(new SKRect(0, 0, (float)bounds.Width, (float)bounds.Height));
         canvas.Clear(Background);
 
+        DrawGrid(canvas);
         DrawOriginMarker(canvas);
         DrawPaths(canvas);
         DrawPoints(canvas);
@@ -201,6 +203,8 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
             canvas.DrawRect((float)p.X - GripPixels, (float)p.Y - GripPixels, 2 * GripPixels, 2 * GripPixels, fill);
         }
 
+        DrawTracking(canvas);
+
         if (overlay.Snap is { } snap)
         {
             DrawSnapMarker(canvas, snap);
@@ -325,6 +329,100 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
                 canvas.DrawLine(x - s, y - s, x + s, y + s, paint);
                 canvas.DrawLine(x - s, y + s, x + s, y - s, paint);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Griglia a punti, con un punto più marcato ogni cinque. Se i punti sarebbero troppo fitti il passo si moltiplica
+    /// per cinque finché restano leggibili, come negli altri CAD.
+    /// </summary>
+    private void DrawGrid(SKCanvas canvas)
+    {
+        var spacing = overlay.GridSpacing;
+        if (spacing <= 0 || visibleWorld.IsEmpty)
+        {
+            return;
+        }
+
+        var pixels = worldToScreen.TransformVector(new Vector2(spacing, 0)).Length;
+        var step = 1;
+        while (pixels * step < 10 && step < 1_000_000)
+        {
+            step *= 5;
+        }
+
+        var world = spacing * step;
+        var x0 = (long)Math.Floor(visibleWorld.Min.X / world);
+        var x1 = (long)Math.Ceiling(visibleWorld.Max.X / world);
+        var y0 = (long)Math.Floor(visibleWorld.Min.Y / world);
+        var y1 = (long)Math.Ceiling(visibleWorld.Max.Y / world);
+        if ((x1 - x0) * (y1 - y0) > 40_000)
+        {
+            return;
+        }
+
+        using var minor = new SKPaint { Style = SKPaintStyle.Fill, Color = new SKColor(0x5A, 0x5A, 0x5A) };
+        using var major = new SKPaint { Style = SKPaintStyle.Fill, Color = new SKColor(0x80, 0x80, 0x80) };
+        for (var i = x0; i <= x1; i++)
+        {
+            for (var j = y0; j <= y1; j++)
+            {
+                var p = worldToScreen.Transform(new Vector2(i * world, j * world));
+                var strong = i % 5 == 0 && j % 5 == 0;
+                canvas.DrawRect((float)p.X - 0.5f, (float)p.Y - 0.5f, strong ? 2 : 1, strong ? 2 : 1, strong ? major : minor);
+            }
+        }
+    }
+
+    /// <summary>Guide di tracciamento punteggiate, croci sui punti acquisiti e didascalia con distanza e angolo.</summary>
+    private void DrawTracking(SKCanvas canvas)
+    {
+        using var paint = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1, Color = TrackingColor };
+        foreach (var point in overlay.Acquired)
+        {
+            var p = worldToScreen.Transform(point);
+            canvas.DrawLine((float)p.X - 4, (float)p.Y, (float)p.X + 4, (float)p.Y, paint);
+            canvas.DrawLine((float)p.X, (float)p.Y - 4, (float)p.X, (float)p.Y + 4, paint);
+        }
+
+        if (overlay.TrackingLines.Count == 0)
+        {
+            return;
+        }
+
+        using var dots = SKPathEffect.CreateDash([2, 4], 0);
+        paint.PathEffect = dots;
+        var reach = Math.Max(bounds.Width, bounds.Height) * 2;
+        foreach (var line in overlay.TrackingLines)
+        {
+            var a = worldToScreen.Transform(line.Origin);
+            var direction = worldToScreen.TransformVector(line.Direction).Normalized();
+            var b = a + direction * reach;
+            canvas.DrawLine((float)a.X, (float)a.Y, (float)b.X, (float)b.Y, paint);
+        }
+
+        paint.PathEffect = null;
+        if (overlay.TrackingPoint is { } at)
+        {
+            var p = worldToScreen.Transform(at);
+            canvas.DrawLine((float)p.X - 5, (float)p.Y - 5, (float)p.X + 5, (float)p.Y + 5, paint);
+            canvas.DrawLine((float)p.X - 5, (float)p.Y + 5, (float)p.X + 5, (float)p.Y - 5, paint);
+            if (overlay.TrackingLabel is { } label)
+            {
+                using var text = new SKPaint { Typeface = LabelTypeface, TextSize = 11, IsAntialias = true, Color = new SKColor(0x20, 0x20, 0x20) };
+                var width = text.MeasureText(label);
+                // Sopra il cursore, dove non copre l'inserimento rapido; vicino al bordo passa a sinistra.
+                var x = (float)p.X + 14;
+                if (x + width + 6 > bounds.Width)
+                {
+                    x = (float)p.X - 14 - width;
+                }
+
+                var y = (float)p.Y - 12;
+                using var back = new SKPaint { Style = SKPaintStyle.Fill, Color = new SKColor(0xB8, 0xF0, 0xB8, 0xE8) };
+                canvas.DrawRoundRect(x - 3, y - 11, width + 6, 15, 2, 2, back);
+                canvas.DrawText(label, x, y, text);
+            }
         }
     }
 

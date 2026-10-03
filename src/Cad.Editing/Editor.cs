@@ -79,6 +79,45 @@ public sealed class Editor
     public bool SnapEnabled { get; set; } = true;
     public bool OrthoEnabled { get; set; }
 
+    /// <summary>Tracciamento polare: guide ogni <see cref="PolarIncrementDegrees"/> gradi dal punto base (F10).</summary>
+    public bool PolarEnabled { get; set; } = true;
+    public double PolarIncrementDegrees { get; set; } = 45;
+
+    /// <summary>Tracciamento di allineamento (ETrack): guide orizzontali e verticali dai punti di snap acquisiti (F11).</summary>
+    public bool TrackingEnabled { get; set; } = true;
+
+    /// <summary>Griglia visibile (F7) e aggancio alla griglia (F9), con passo <see cref="GridSpacing"/>.</summary>
+    public bool GridVisible { get; set; }
+    public bool GridSnapEnabled { get; set; }
+    public double GridSpacing { get; set; } = 10;
+
+    /// <summary>Guida di tracciamento attiva sotto il cursore, se c'è.</summary>
+    public TrackingResult? CurrentTracking { get; private set; }
+
+    /// <summary>Punti acquisiti per ETrack: un punto di snap su cui il cursore si ferma un attimo.</summary>
+    public IReadOnlyList<Vector2> AcquiredPoints => _acquired;
+
+    /// <summary>Tempo in millisecondi, sostituibile nei test.</summary>
+    public Func<long> Clock { get; set; } = () => Environment.TickCount64;
+
+    /// <summary>Quanto il cursore deve restare su uno snap perché il punto venga acquisito.</summary>
+    public const int AcquireMilliseconds = 400;
+
+    private const int MaxAcquiredPoints = 5;
+    private readonly List<Vector2> _acquired = [];
+    private (Vector2 Point, long Since)? _snapDwell;
+    private (Vector2 At, Entity Entity)? _lastPick;
+
+    /// <summary>Inserimento rapido: distanza e angolo (radianti) bloccati con Tab, che vincolano il punto successivo.</summary>
+    public double? LockedDistance { get; private set; }
+    public double? LockedAngle { get; private set; }
+
+    /// <summary>La richiesta in corso è un punto con punto base: l'inserimento rapido mostra distanza e angolo.</summary>
+    public bool WantsPointFromBase => _pending is not null && _pendingKind == PromptKind.Point && BasePoint is not null;
+
+    /// <summary>La richiesta in corso è un punto (con o senza punto base).</summary>
+    public bool WantsPoint => _pending is not null && _pendingKind is PromptKind.Point or PromptKind.Distance or PromptKind.Angle;
+
     /// <summary>Cresce a ogni nuova richiesta: la finestra lo usa per sapere quando proporre <see cref="SuggestedInput"/>.</summary>
     public int PromptId { get; private set; }
 
@@ -150,8 +189,10 @@ public sealed class Editor
     public void Hover(Vector2 world, double aperture)
     {
         _aperture = aperture;
-        Cursor = ResolvePoint(world, aperture, out var snap);
+        Cursor = Resolve(world, aperture, out var snap, out var tracking);
         CurrentSnap = snap;
+        CurrentTracking = tracking;
+        UpdateAcquisition(snap);
         HoverEntity = (IsSelecting || IsPickingEntity) && WindowStart is null ? Locator.Pick(world, aperture) : null;
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -181,7 +222,7 @@ public sealed class Editor
 
         if (!IsSelecting)
         {
-            var point = ResolvePoint(world, aperture, out _);
+            var point = Resolve(world, aperture, out _, out _);
             CompletePending(_pendingKind switch
             {
                 PromptKind.Distance when BasePoint is { } b => new PromptResult(PromptStatus.Ok, point, Vector2.Distance(b, point)),
@@ -201,9 +242,23 @@ public sealed class Editor
             return;
         }
 
-        if (Locator.Pick(world, aperture) is { } entity)
+        var candidates = Locator.PickAll(world, aperture);
+        if (candidates.Count > 0)
         {
-            ApplySelection([entity], removeFromSelection);
+            // Secondo clic nello stesso punto su oggetti sovrapposti: si passa al successivo (selezione ciclica).
+            if (!removeFromSelection && candidates.Count > 1 && _lastPick is { } last && Vector2.Distance(last.At, world) <= aperture
+                && Selection.Contains(last.Entity) && candidates.ToList().IndexOf(last.Entity) is var index and >= 0)
+            {
+                var next = candidates[(index + 1) % candidates.Count];
+                Selection.Remove([last.Entity]);
+                _lastPick = (world, next);
+                ApplySelection([next], remove: false);
+                Write($"Selezione ciclica: {PropertySheet.TypeName(next)} ({(index + 1) % candidates.Count + 1} di {candidates.Count})");
+                return;
+            }
+
+            _lastPick = (world, candidates[0]);
+            ApplySelection([candidates[0]], removeFromSelection);
             return;
         }
 
@@ -235,6 +290,31 @@ public sealed class Editor
         {
             CompletePending(text.Length == 0 ? PromptResult.Empty : new PromptResult(PromptStatus.Ok, Text: text));
             return;
+        }
+
+        if (_pendingKind == PromptKind.Point && BasePoint is { } lockOrigin && (LockedDistance is not null || LockedAngle is not null))
+        {
+            // Inserimento rapido con un valore bloccato: il numero scritto è l'altro.
+            if (trimmed.Length == 0 || InputParser.TryParseNumber(trimmed, out _))
+            {
+                if (trimmed.Length > 0)
+                {
+                    InputParser.TryParseNumber(trimmed, out var other);
+                    if (LockedDistance is null)
+                    {
+                        LockedDistance = Math.Abs(other);
+                    }
+                    else
+                    {
+                        LockedAngle = InputParser.DegreesToRadians(other);
+                    }
+                }
+
+                var angle = LockedAngle ?? (Cursor - lockOrigin).Angle;
+                var length = LockedDistance ?? Vector2.Distance(lockOrigin, Cursor);
+                CompletePending(new PromptResult(PromptStatus.Ok, lockOrigin + Vector2.FromPolar(length, angle)));
+                return;
+            }
         }
 
         if (trimmed.Length == 0)
@@ -392,6 +472,9 @@ public sealed class Editor
     {
         PromptId++;
         SuggestedInput = initialText;
+        LockedDistance = null;
+        LockedAngle = null;
+        CurrentTracking = null;
         _pending = new TaskCompletionSource<PromptResult>();
         _pendingKind = kind;
         _keywords = keywords;
@@ -413,6 +496,11 @@ public sealed class Editor
         _pending = null;
         _preview = null;
         WindowStart = null;
+        LockedDistance = null;
+        LockedAngle = null;
+        CurrentTracking = null;
+        _acquired.Clear();
+        _snapDwell = null;
         pending.SetResult(result);
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -489,13 +577,24 @@ public sealed class Editor
         }
     }
 
-    /// <summary>Applica snap (che ha la precedenza) e ortho a una posizione del cursore.</summary>
-    public Vector2 ResolvePoint(Vector2 world, double aperture, out SnapResult? snap)
+    /// <summary>Applica snap (che ha la precedenza), vincoli dell'inserimento rapido, tracciamento, ortho e griglia.</summary>
+    public Vector2 ResolvePoint(Vector2 world, double aperture, out SnapResult? snap) => Resolve(world, aperture, out snap, out _);
+
+    private Vector2 Resolve(Vector2 world, double aperture, out SnapResult? snap, out TrackingResult? tracking)
     {
         snap = null;
+        tracking = null;
         if (_pending is null || _pendingKind is PromptKind.Selection or PromptKind.Entity)
         {
             return world;
+        }
+
+        // Distanza o angolo bloccati: il punto sta sul cerchio o sul raggio dal punto base.
+        if (_pendingKind == PromptKind.Point && BasePoint is { } origin && (LockedDistance is not null || LockedAngle is not null))
+        {
+            var angle = LockedAngle ?? (world - origin).Angle;
+            var length = LockedDistance ?? Math.Max(0, Vector2.Dot(world - origin, Vector2.FromPolar(1, angle)));
+            return origin + Vector2.FromPolar(length, angle);
         }
 
         if (SnapEnabled)
@@ -513,7 +612,95 @@ public sealed class Editor
             return Math.Abs(d.X) >= Math.Abs(d.Y) ? new Vector2(world.X, b.Y) : new Vector2(b.X, world.Y);
         }
 
-        return world;
+        var polar = PolarEnabled && PolarIncrementDegrees > 0 ? InputParser.DegreesToRadians(PolarIncrementDegrees) : (double?)null;
+        var acquired = TrackingEnabled && SnapEnabled ? _acquired : [];
+        if ((polar is not null && BasePoint is not null) || acquired.Count > 0)
+        {
+            tracking = Tracking.Find(world, aperture, BasePoint, polar, acquired);
+            if (tracking is not null)
+            {
+                return tracking.Point;
+            }
+        }
+
+        return GridSnapEnabled ? Tracking.SnapToGrid(world, GridSpacing) : world;
+    }
+
+    /// <summary>Un punto di snap su cui il cursore resta fermo per un attimo diventa un punto acquisito per ETrack.</summary>
+    private void UpdateAcquisition(SnapResult? snap)
+    {
+        if (!TrackingEnabled || !WantsPoint)
+        {
+            _snapDwell = null;
+            return;
+        }
+
+        var now = Clock();
+        if (snap is { } s)
+        {
+            if (_snapDwell is not { } dwell || Vector2.Distance(dwell.Point, s.Point) > 1e-9)
+            {
+                _snapDwell = (s.Point, now);
+            }
+            else if (now - dwell.Since >= AcquireMilliseconds && !_acquired.Any(p => Vector2.Distance(p, s.Point) < 1e-9))
+            {
+                _acquired.Add(s.Point);
+                if (_acquired.Count > MaxAcquiredPoints)
+                {
+                    _acquired.RemoveAt(0);
+                }
+            }
+
+            return;
+        }
+
+        // Il cursore lascia lo snap dopo esserci rimasto abbastanza: anche così il punto si acquisisce.
+        if (_snapDwell is { } left && now - left.Since >= AcquireMilliseconds && !_acquired.Any(p => Vector2.Distance(p, left.Point) < 1e-9))
+        {
+            _acquired.Add(left.Point);
+            if (_acquired.Count > MaxAcquiredPoints)
+            {
+                _acquired.RemoveAt(0);
+            }
+        }
+
+        _snapDwell = null;
+    }
+
+    /// <summary>
+    /// Tab nell'inserimento rapido: il numero scritto blocca la distanza dal punto base, poi l'angolo (in gradi).
+    /// Restituisce false se ora non c'è niente da bloccare.
+    /// </summary>
+    public bool LockInput(string text)
+    {
+        if (!WantsPointFromBase || !InputParser.TryParseNumber(text.Trim(), out var value))
+        {
+            return false;
+        }
+
+        if (LockedDistance is null)
+        {
+            LockedDistance = Math.Abs(value);
+        }
+        else
+        {
+            LockedAngle = InputParser.DegreesToRadians(value);
+        }
+
+        Cursor = Resolve(Cursor, _aperture, out _, out _);
+        StateChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>Seleziona tutte le entità selezionabili (Ctrl+A).</summary>
+    public void SelectAll()
+    {
+        if (_pending is not null && _pendingKind != PromptKind.Selection)
+        {
+            return;
+        }
+
+        ApplySelection(Document.ModelSpace.Where(EntityLocator.IsSelectable).ToList(), remove: false);
     }
 
     private void ApplySelection(IReadOnlyList<Entity> entities, bool remove)

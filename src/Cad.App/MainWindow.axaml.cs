@@ -37,20 +37,9 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         CommandBox.AddHandler(KeyDownEvent, OnCommandBoxKeyDown, RoutingStrategies.Tunnel);
 
-        SnapToggle.IsCheckedChanged += (_, _) =>
-        {
-            if (_editor is not null)
-            {
-                _editor.SnapEnabled = SnapToggle.IsChecked == true;
-            }
-        };
-        OrthoToggle.IsCheckedChanged += (_, _) =>
-        {
-            if (_editor is not null)
-            {
-                _editor.OrthoEnabled = OrthoToggle.IsChecked == true;
-            }
-        };
+        InitializeDraftingToggles();
+        InitializeQuickInput();
+        InitializeCompletion();
         InitializeLayerControls();
 
         AddHandler(DragDrop.DropEvent, OnDrop);
@@ -135,6 +124,9 @@ public partial class MainWindow : Window
                 break;
             case "PALETTELAYER":
                 ShowPalette(1);
+                break;
+            case "SELEZIONATUTTO":
+                _editor?.SelectAll();
                 break;
             default:
                 _editor?.RunCommand(command);
@@ -331,10 +323,9 @@ public partial class MainWindow : Window
 
         var editor = new Editor(document)
         {
-            SnapEnabled = SnapToggle.IsChecked == true,
-            OrthoEnabled = OrthoToggle.IsChecked == true,
             SnapModes = _snapModes,
         };
+        ApplyDraftingToggles(editor);
         RegisterUiCommands(editor);
         editor.Message += AppendHistory;
         editor.StateChanged += OnEditorStateChanged;
@@ -346,7 +337,8 @@ public partial class MainWindow : Window
         editor.Selection.Changed += (_, _) => RefreshProperties();
         RefreshLayers(force: true);
         UpdateTitle();
-        PromptText.Text = editor.Prompt;
+        _shownKeywords = [];
+        UpdateKeywordButtons();
     }
 
     private void OnDocumentChanged(object? sender, EventArgs e)
@@ -367,7 +359,8 @@ public partial class MainWindow : Window
     {
         if (_editor is not null)
         {
-            PromptText.Text = _editor.Prompt;
+            UpdateKeywordButtons();
+            UpdateQuickInput();
             if (_editor.PromptId != _shownPromptId)
             {
                 // Testo proposto (es. MODIFICATESTO): si parte da quello, pronto da correggere.
@@ -581,31 +574,32 @@ public partial class MainWindow : Window
             _ => null,
         };
 
+        command ??= ClipboardShortcut(e, ctrl, shift);
         if (command is not null)
         {
-            _editor.RunCommand(command);
+            RunUiCommand(command);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.KeyModifiers == KeyModifiers.None && HandleFunctionKey(e.Key))
+        {
             e.Handled = true;
             return;
         }
 
         switch (e.Key)
         {
+            case Key.Escape when CompletionPopup.IsOpen:
+                CompletionPopup.IsOpen = false;
+                e.Handled = true;
+                break;
             case Key.Escape when e.Source is Visual source && IsInPalette(source):
                 // Esc in una casella della palette annulla solo la modifica in corso.
                 break;
             case Key.Escape:
                 CommandBox.Text = "";
                 _editor.Cancel();
-                e.Handled = true;
-                break;
-            case Key.F3:
-                SnapToggle.IsChecked = SnapToggle.IsChecked != true;
-                AppendHistory(SnapToggle.IsChecked == true ? "<Snap attivo>" : "<Snap disattivato>");
-                e.Handled = true;
-                break;
-            case Key.F8:
-                OrthoToggle.IsChecked = OrthoToggle.IsChecked != true;
-                AppendHistory(OrthoToggle.IsChecked == true ? "<Ortho attivo>" : "<Ortho disattivato>");
                 e.Handled = true;
                 break;
         }
@@ -619,11 +613,27 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (HandleCommandBoxNavigation(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         var text = CommandBox.Text ?? "";
         if (e.Key == Key.Enter || (e.Key == Key.Space && !_editor.AcceptsSpaces))
         {
+            text = AcceptCompletion(text);
+            RememberInput(text);
             CommandBox.Text = "";
-            _editor.SubmitText(text);
+            if (!_editor.IsCommandActive && UiOnlyCommands.Contains(text.Trim().ToUpperInvariant()))
+            {
+                RunUiCommand(text.Trim().ToUpperInvariant());
+            }
+            else
+            {
+                _editor.SubmitText(text);
+            }
+
             e.Handled = true;
         }
         else if (e.Key == Key.Delete && text.Length == 0 && !_editor.IsCommandActive && _editor.Selection.Count > 0)
