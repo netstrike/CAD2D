@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -13,6 +14,43 @@ public partial class MainWindow
     private string _layerSignature = "";
 
     private bool _updatingProperties;
+
+    // Caselle layer, colore e tipo di linea: stanno nella barra multifunzione (Home > Layer e proprietà).
+    private readonly ComboBox LayerCombo = PropertyCombo();
+    private readonly ComboBox ColorCombo = PropertyCombo();
+    private readonly ComboBox LinetypeCombo = PropertyCombo();
+
+    private static ComboBox PropertyCombo() => new()
+    {
+        Width = 190,
+        Height = 24,
+        MinHeight = 24,
+        FontSize = 11.5,
+        Padding = new Thickness(6, 0),
+        Margin = new Thickness(0, 1),
+        Focusable = false,
+    };
+
+    /// <summary>Le tre caselle in colonna, con una piccola icona davanti, per il gruppo della barra multifunzione.</summary>
+    private Control BuildPropertyCombos()
+    {
+        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto"), ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(6, 0, 4, 0) };
+        (string Icon, ComboBox Combo)[] rows = [("LAYER", LayerCombo), ("COLORE", ColorCombo), ("TIPOLINEA", LinetypeCombo)];
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var icon = Controls.Icons.Create(rows[i].Icon, 16);
+            icon.Margin = new Thickness(0, 0, 6, 0);
+            icon.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+            Grid.SetRow(icon, i);
+            grid.Children.Add(icon);
+            (rows[i].Combo.Parent as Panel)?.Children.Remove(rows[i].Combo);
+            Grid.SetRow(rows[i].Combo, i);
+            Grid.SetColumn(rows[i].Combo, 1);
+            grid.Children.Add(rows[i].Combo);
+        }
+
+        return grid;
+    }
 
     private sealed record ColorChoice(string Label, EntityColor Value)
     {
@@ -150,7 +188,16 @@ public partial class MainWindow
         _updatingProperties = true;
         try
         {
-            PropertiesLabel.Text = selected.Count > 0 ? $"{selected.Count} oggetti selezionati:" : "Nuovi oggetti:";
+            SelectionText.Text = selected.Count switch
+            {
+                0 => "",
+                1 => "1 oggetto selezionato",
+                var n => $"{n} oggetti selezionati",
+            };
+            var subject = selected.Count > 0 ? "degli oggetti selezionati" : "dei nuovi oggetti";
+            ToolTip.SetTip(LayerCombo, $"Layer {subject}");
+            ToolTip.SetTip(ColorCombo, $"Colore {subject}");
+            ToolTip.SetTip(LinetypeCombo, $"Tipo di linea {subject}");
 
             var layers = document.Layers.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
             LayerCombo.ItemsSource = layers;

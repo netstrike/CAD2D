@@ -111,6 +111,15 @@ public sealed class Editor
     /// <summary>Vero quando un clic deve indicare un'entità (il cursore non usa snap né ortho).</summary>
     public bool IsPickingEntity => _pending is not null && _pendingKind == PromptKind.Entity;
 
+    /// <summary>Opzioni della richiesta in corso (per esempio Raggio e Polilinea in RACCORDA).</summary>
+    public IReadOnlyList<string> Keywords => _keywords;
+
+    /// <summary>Ultimo comando eseguito, quello che Invio a vuoto ripete.</summary>
+    public string? LastCommand => _lastCommand;
+
+    /// <summary>Entità sotto il cursore quando un clic la selezionerebbe: si evidenzia prima del clic.</summary>
+    public Entity? HoverEntity { get; private set; }
+
     /// <summary>Raggio di cattura usato per l'ultimo movimento del mouse, in unità di disegno.</summary>
     public double Aperture => _aperture;
 
@@ -143,6 +152,7 @@ public sealed class Editor
         _aperture = aperture;
         Cursor = ResolvePoint(world, aperture, out var snap);
         CurrentSnap = snap;
+        HoverEntity = (IsSelecting || IsPickingEntity) && WindowStart is null ? Locator.Pick(world, aperture) : null;
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 

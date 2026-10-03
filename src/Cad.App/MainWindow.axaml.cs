@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -54,6 +55,202 @@ public partial class MainWindow : Window
 
         AddHandler(DragDrop.DropEvent, OnDrop);
         BuildSnapMenu();
+        BuildRibbon();
+        BuildPalettes();
+        Canvas.ContextMenuRequested += (_, at) => ShowCanvasMenu(at);
+    }
+
+    // ---------- Barra multifunzione, accesso rapido e palette ----------
+
+    private void BuildRibbon()
+    {
+        RibbonBar.Build(Controls.Ribbon.Default(BuildPropertyCombos));
+        RibbonBar.CommandRequested += (_, command) => RunUiCommand(command);
+
+        (string Command, string Tip)[] quick =
+        [
+            ("NUOVO", "Nuovo (Ctrl+N)"),
+            ("APRI", "Apri (Ctrl+O)"),
+            ("SALVA", "Salva (Ctrl+S)"),
+            ("SALVACOME", "Salva con nome (Ctrl+Maiusc+S)"),
+            ("ANNULLA", "Annulla (Ctrl+Z)"),
+            ("RIPETI", "Ripeti (Ctrl+Y)"),
+        ];
+        foreach (var (command, tip) in quick)
+        {
+            var button = new Button
+            {
+                Content = Controls.Icons.Create(command, 16),
+                Padding = new Thickness(5, 3),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Focusable = false,
+            };
+            ToolTip.SetTip(button, tip);
+            button.Click += (_, _) => RunUiCommand(command);
+            QuickAccess.Children.Add(button);
+        }
+    }
+
+    private void BuildPalettes()
+    {
+        PaletteTabs.SelectedIndex = 0;
+        PaletteTabs.SelectionChanged += (_, _) =>
+        {
+            PropertiesPanel.IsVisible = PaletteTabs.SelectedIndex == 0;
+            LayerPalette.IsVisible = PaletteTabs.SelectedIndex == 1;
+        };
+        PropertiesPanel.Committed += (_, _) => CommandBox.Focus();
+
+        // Tasto destro su ESNAP: gli stessi tipi di snap del menu Strumenti.
+        var snapItems = new List<MenuItem>();
+        foreach (var (mode, label) in SnapItems)
+        {
+            var item = new MenuItem { Header = label, ToggleType = MenuItemToggleType.CheckBox };
+            item.Click += (_, _) => ToggleSnapMode(mode);
+            snapItems.Add(item);
+        }
+
+        var menu = new ContextMenu { ItemsSource = snapItems };
+        menu.Opening += (_, _) =>
+        {
+            for (var i = 0; i < SnapItems.Length; i++)
+            {
+                snapItems[i].IsChecked = _snapModes.HasFlag(SnapItems[i].Mode);
+            }
+        };
+        SnapToggle.ContextMenu = menu;
+    }
+
+    /// <summary>Comando chiesto da barra, menu o accesso rapido: quelli di sola interfaccia qui, gli altri all'editor.</summary>
+    private void RunUiCommand(string command)
+    {
+        switch (command)
+        {
+            case "ZOOMESTENSIONI":
+                Canvas.ZoomExtents();
+                break;
+            case "PROPRIETA":
+                ShowPalette(0);
+                break;
+            case "PALETTELAYER":
+                ShowPalette(1);
+                break;
+            default:
+                _editor?.RunCommand(command);
+                break;
+        }
+
+        CommandBox.Focus();
+    }
+
+    /// <summary>
+    /// Menu del tasto destro tenuto premuto, secondo il momento: durante un comando Invio, Annulla e le sue opzioni;
+    /// con oggetti selezionati le modifiche più usate; altrimenti ripetizione e vista.
+    /// </summary>
+    private void ShowCanvasMenu(Point at)
+    {
+        if (_editor is not { } editor)
+        {
+            return;
+        }
+
+        var items = new List<Control>();
+        void Add(string header, Action action, string? icon = null)
+        {
+            var item = new MenuItem { Header = header, Icon = icon is null ? null : Controls.Icons.Create(icon, 16) };
+            item.Click += (_, _) =>
+            {
+                action();
+                CommandBox.Focus();
+            };
+            items.Add(item);
+        }
+
+        if (editor.IsCommandActive)
+        {
+            Add("Invio", () => editor.SubmitText(""));
+            Add("Annulla", () => editor.Cancel());
+            if (editor.Keywords.Count > 0)
+            {
+                items.Add(new Separator());
+                foreach (var keyword in editor.Keywords)
+                {
+                    Add(keyword, () => editor.SubmitText(keyword));
+                }
+            }
+        }
+        else
+        {
+            if (editor.LastCommand is { } last)
+            {
+                Add($"Ripeti {last}", () => editor.RunCommand(last), last);
+                items.Add(new Separator());
+            }
+
+            if (editor.Selection.Count > 0)
+            {
+                foreach (var (command, label) in new[] { ("SPOSTA", "Sposta"), ("COPIA", "Copia"), ("RUOTA", "Ruota"), ("SCALA", "Scala"), ("SPECCHIA", "Specchia"), ("CANCELLA", "Cancella") })
+                {
+                    Add(label, () => editor.RunCommand(command), command);
+                }
+
+                items.Add(new Separator());
+                Add("Proprietà", () => ShowPalette(0), "PROPRIETA");
+                Add("Deseleziona tutto", () => editor.Selection.Clear());
+            }
+            else
+            {
+                Add("Annulla", () => editor.RunCommand("ANNULLA"), "ANNULLA");
+                Add("Ripeti", () => editor.RunCommand("RIPETI"), "RIPETI");
+                items.Add(new Separator());
+                Add("Zoom estensioni", Canvas.ZoomExtents, "ZOOMESTENSIONI");
+                Add("Zoom finestra", () => editor.RunCommand("ZOOM"), "ZOOM");
+                Add("Proprietà", () => ShowPalette(0), "PROPRIETA");
+            }
+        }
+
+        var menu = new ContextMenu { ItemsSource = items, Placement = PlacementMode.AnchorAndGravity, PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft, PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight, PlacementRect = new Rect(at, new Size(1, 1)) };
+        menu.Open(Canvas);
+    }
+
+    private void ShowPalette(int tab)
+    {
+        PalettePanel.IsVisible = true;
+        PaletteSplitter.IsVisible = true;
+        WorkArea.ColumnDefinitions[2].Width = new GridLength(_paletteWidth);
+        PaletteTabs.SelectedIndex = tab;
+    }
+
+    private double _paletteWidth = 300;
+
+    private void OnClosePalettes(object? sender, RoutedEventArgs e)
+    {
+        _paletteWidth = Math.Max(200, PalettePanel.Bounds.Width);
+        PalettePanel.IsVisible = false;
+        PaletteSplitter.IsVisible = false;
+        WorkArea.ColumnDefinitions[2].Width = new GridLength(0);
+        CommandBox.Focus();
+    }
+
+    private void ToggleSnapMode(SnapModes mode)
+    {
+        // Lo stato si ricava dalla maschera: non dipende da quando il menu aggiorna la spunta.
+        _snapModes ^= mode;
+        if (SnapMenu.ItemsSource is IEnumerable<MenuItem> items)
+        {
+            foreach (var (item, (m, _)) in items.Zip(SnapItems))
+            {
+                item.IsChecked = _snapModes.HasFlag(m);
+            }
+        }
+
+        if (_editor is not null)
+        {
+            _editor.SnapModes = _snapModes;
+        }
+
+        CommandBox.Focus();
     }
 
     private static readonly (SnapModes Mode, string Label)[] SnapItems =
@@ -78,18 +275,7 @@ public partial class MainWindow : Window
         foreach (var (mode, label) in SnapItems)
         {
             var item = new MenuItem { Header = label, ToggleType = MenuItemToggleType.CheckBox, IsChecked = _snapModes.HasFlag(mode) };
-            item.Click += (_, _) =>
-            {
-                // Lo stato si ricava dalla maschera: non dipende da quando il menu aggiorna la spunta.
-                _snapModes ^= mode;
-                item.IsChecked = _snapModes.HasFlag(mode);
-                if (_editor is not null)
-                {
-                    _editor.SnapModes = _snapModes;
-                }
-
-                CommandBox.Focus();
-            };
+            item.Click += (_, _) => ToggleSnapMode(mode);
             items.Add(item);
         }
 
@@ -156,6 +342,7 @@ public partial class MainWindow : Window
         _editor = editor;
 
         Canvas.Editor = editor;
+        PropertiesPanel.Editor = editor;
         editor.Selection.Changed += (_, _) => RefreshProperties();
         RefreshLayers(force: true);
         UpdateTitle();
@@ -403,6 +590,9 @@ public partial class MainWindow : Window
 
         switch (e.Key)
         {
+            case Key.Escape when e.Source is Visual source && IsInPalette(source):
+                // Esc in una casella della palette annulla solo la modifica in corso.
+                break;
             case Key.Escape:
                 CommandBox.Text = "";
                 _editor.Cancel();
@@ -443,12 +633,13 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool IsInPalette(Visual visual) => visual == PalettePanel || visual.GetVisualAncestors().Contains(PalettePanel);
+
     private void OnMenuCommand(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { Tag: string command })
         {
-            _editor?.RunCommand(command);
-            CommandBox.Focus();
+            RunUiCommand(command);
         }
     }
 

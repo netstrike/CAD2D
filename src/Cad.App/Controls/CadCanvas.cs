@@ -27,6 +27,15 @@ public sealed class CadCanvas : Control
     /// <summary>Oltre questo numero di entità selezionate i grip non si mostrano (come negli altri CAD).</summary>
     private const int MaxGripEntities = 100;
 
+    /// <summary>Oltre questo tempo il tasto destro tenuto premuto apre il menu invece di dare Invio.</summary>
+    private const int RightHoldMilliseconds = 300;
+
+    private Point? _rightPress;
+    private Avalonia.Threading.DispatcherTimer? _rightHold;
+
+    /// <summary>Tasto destro tenuto premuto: la finestra apre il menu contestuale in quel punto.</summary>
+    public event EventHandler<Point>? ContextMenuRequested;
+
     private static readonly CadColor HighlightColor = new(0x4F, 0xA3, 0xFF);
 
     private Editor? _editor;
@@ -142,8 +151,20 @@ public sealed class CadCanvas : Control
         }
         else if (properties.IsRightButtonPressed)
         {
-            // Tasto destro = Invio, come nei CAD: conferma o ripete l'ultimo comando.
-            _editor.SubmitText("");
+            // Tasto destro breve = Invio (conferma o ripete l'ultimo comando); tenuto premuto = menu contestuale.
+            _rightPress = point.Position;
+            _rightHold?.Stop();
+            _rightHold = new Avalonia.Threading.DispatcherTimer(TimeSpan.FromMilliseconds(RightHoldMilliseconds), Avalonia.Threading.DispatcherPriority.Input, (_, _) =>
+            {
+                _rightHold?.Stop();
+                _rightHold = null;
+                if (_rightPress is { } at)
+                {
+                    _rightPress = null;
+                    ContextMenuRequested?.Invoke(this, at);
+                }
+            });
+            _rightHold.Start();
         }
         else if (properties.IsLeftButtonPressed)
         {
@@ -195,6 +216,15 @@ public sealed class CadCanvas : Control
         {
             _panOrigin = null;
             e.Pointer.Capture(null);
+        }
+        else if (e.InitialPressMouseButton == MouseButton.Right && _rightPress is not null)
+        {
+            // Rilasciato prima del menu: è un Invio.
+            _rightHold?.Stop();
+            _rightHold = null;
+            _rightPress = null;
+            _editor?.SubmitText("");
+            e.Handled = true;
         }
     }
 
@@ -269,7 +299,12 @@ public sealed class CadCanvas : Control
         var rubberFrom = !_editor.IsSelecting && _editor.BasePoint is { } basePoint && cursor is not null ? basePoint : (Vector2?)null;
         var window = _editor.WindowStart is { } start && _pointerWorld is { } raw ? (start, raw) : ((Vector2, Vector2)?)null;
 
-        _overlay = new Overlay(highlight, grips, preview, rubberFrom, cursor, window, _pointerWorld is null ? null : _editor.CurrentSnap, cursor);
+        // L'oggetto sotto il cursore si illumina prima del clic (non se è già selezionato).
+        var hover = _pointerWorld is not null && _editor.HoverEntity is { } hovered && !_editor.Selection.Contains(hovered)
+            ? SceneBuilder.BuildEntities([hovered], HighlightColor).Batches.SelectMany(b => b.Polylines).ToList()
+            : [];
+
+        _overlay = new Overlay(highlight, grips, preview, rubberFrom, cursor, window, _pointerWorld is null ? null : _editor.CurrentSnap, cursor, hover);
         InvalidateVisual();
     }
 

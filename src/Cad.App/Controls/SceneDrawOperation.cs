@@ -32,6 +32,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
     private static readonly SKColor SnapColor = new(0xFF, 0xC0, 0x20);
     private static readonly SKColor CrosshairColor = new(0xC8, 0xC8, 0xC8);
     private static readonly SKTypeface TextTypeface = SKTypeface.FromFamilyName("Arial") ?? SKTypeface.Default;
+    private static readonly SKTypeface LabelTypeface = SKTypeface.FromFamilyName("Segoe UI") ?? TextTypeface;
     private static readonly float CapHeightRatio = MeasureCapHeightRatio();
 
     public Rect Bounds => bounds;
@@ -150,6 +151,15 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
     {
         using var stroke = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1 };
 
+        // Oggetto sotto il cursore: ripassato più spesso, prima del clic.
+        if (overlay.Hover.Count > 0)
+        {
+            stroke.Color = HighlightColor;
+            stroke.StrokeWidth = 2.5f;
+            DrawPolylines(canvas, overlay.Hover, stroke);
+            stroke.StrokeWidth = 1;
+        }
+
         // Selezione: le entità selezionate ripassate tratteggiate.
         if (overlay.Highlight.Count > 0)
         {
@@ -194,6 +204,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
         if (overlay.Snap is { } snap)
         {
             DrawSnapMarker(canvas, snap);
+            DrawSnapLabel(canvas, snap);
         }
 
         if (overlay.Crosshair is { } cross)
@@ -315,6 +326,37 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
                 canvas.DrawLine(x - s, y + s, x + s, y - s, paint);
                 break;
         }
+    }
+
+    /// <summary>Nome dello snap accanto al simbolo, come la didascalia di DraftSight.</summary>
+    private void DrawSnapLabel(SKCanvas canvas, SnapResult snap)
+    {
+        var label = snap.Kind switch
+        {
+            SnapModes.Endpoint => "Estremo",
+            SnapModes.Midpoint => "Medio",
+            SnapModes.Center => "Centro",
+            SnapModes.Quadrant => "Quadrante",
+            SnapModes.Intersection => "Intersezione",
+            SnapModes.Perpendicular => "Perpendicolare",
+            SnapModes.Tangent => "Tangente",
+            SnapModes.Node => "Nodo",
+            SnapModes.Nearest => "Vicino",
+            _ => null,
+        };
+        if (label is null)
+        {
+            return;
+        }
+
+        var p = worldToScreen.Transform(snap.Point);
+        using var text = new SKPaint { Typeface = LabelTypeface, TextSize = 11, IsAntialias = true, Color = new SKColor(0x20, 0x20, 0x20) };
+        var width = text.MeasureText(label);
+        var x = (float)p.X + 12;
+        var y = (float)p.Y + 14;
+        using var back = new SKPaint { Style = SKPaintStyle.Fill, Color = new SKColor(0xFF, 0xE0, 0x80, 0xE8) };
+        canvas.DrawRoundRect(x - 3, y - 11, width + 6, 15, 2, 2, back);
+        canvas.DrawText(label, x, y, text);
     }
 
     private void DrawOriginMarker(SKCanvas canvas)
