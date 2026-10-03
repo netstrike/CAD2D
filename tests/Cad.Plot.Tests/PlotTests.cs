@@ -186,4 +186,69 @@ public class PlotTests
 
         Assert.True(dark > 50, $"testo non stampato ({dark} pixel scuri)");
     }
+
+    [Fact]
+    public void Exact_arcs_print_where_the_tessellated_ones_do()
+    {
+        var document = new CadDocument();
+        var layer = Layer(new CadColor(255, 0, 0));
+        // Un quarto di cerchio in alto a destra e un cerchio: l'arco esatto deve cadere sugli stessi pixel.
+        document.Edit("test", e =>
+        {
+            e.Add(new ArcEntity(layer, Vector2.Zero, 40, 0, Math.PI / 2));
+            e.Add(new CircleEntity(layer, new Vector2(100, 0), 20));
+            e.Add(new LineEntity(layer, new Vector2(-50, -50), new Vector2(150, 50)));
+        });
+        var settings = new PlotSettings { Paper = PaperSize.A4, Landscape = true };
+        var exact = SceneBuilder.Build(document, exactArcs: true);
+        var approximate = SceneBuilder.Build(document);
+        Assert.Contains(exact.Batches, b => b.Arcs.Count == 2);
+        var layout = PlotLayout.Compute(settings, PlotExporter.AreaOf(settings, approximate));
+
+        using var a = PlotExporter.Bitmap(exact, layout, 50);
+        using var b = PlotExporter.Bitmap(approximate, layout, 50);
+        // Stessi pixel a meno dell'antialias: ogni pixel inchiostrato in una ha un vicino inchiostrato nell'altra.
+        static bool Dark(SKBitmap bitmap, int x, int y)
+        {
+            var p = bitmap.GetPixel(Math.Clamp(x, 0, bitmap.Width - 1), Math.Clamp(y, 0, bitmap.Height - 1));
+            return p.Red + p.Green + p.Blue < 700;
+        }
+
+        static bool Near(SKBitmap bitmap, int x, int y)
+        {
+            for (var dy = -1; dy <= 1; dy++)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    if (Dark(bitmap, x + dx, y + dy))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        var inked = 0;
+        var different = 0;
+        for (var y = 0; y < a.Height; y++)
+        {
+            for (var x = 0; x < a.Width; x++)
+            {
+                if (Dark(a, x, y))
+                {
+                    inked++;
+                    different += Near(b, x, y) ? 0 : 1;
+                }
+                else if (Dark(b, x, y) && !Near(a, x, y))
+                {
+                    different++;
+                }
+            }
+        }
+
+        Assert.True(inked > 100);
+        Assert.True(different <= 4, $"{different} pixel diversi su {inked}");
+    }
 }

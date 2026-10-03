@@ -67,6 +67,14 @@ public static class PlotRenderer
                     }
                 }
 
+                foreach (var arc in batch.Arcs)
+                {
+                    if (visible.Intersects(arc.Bounds))
+                    {
+                        AddArc(path, arc, m);
+                    }
+                }
+
                 canvas.DrawPath(path, stroke);
             }
 
@@ -115,6 +123,23 @@ public static class PlotRenderer
         {
             path.Close();
         }
+    }
+
+    /// <summary>Arco esatto portato sul foglio; il foglio ha la y verso il basso, quindi il verso si inverte.</summary>
+    private static void AddArc(SKPath path, RenderArc arc, Matrix2D m)
+    {
+        var c = m.Transform(arc.Center);
+        var r = (float)(arc.Radius * Math.Sqrt(Math.Abs(m.Determinant)));
+        if (arc.IsCircle)
+        {
+            path.AddCircle((float)c.X, (float)c.Y, r);
+            return;
+        }
+
+        var start = (m.Transform(arc.Center + Vector2.FromPolar(arc.Radius, arc.StartAngle)) - c).Angle;
+        var sweep = m.Determinant < 0 ? -arc.Sweep : arc.Sweep;
+        var oval = new SKRect((float)c.X - r, (float)c.Y - r, (float)c.X + r, (float)c.Y + r);
+        path.AddArc(oval, (float)(start * 180 / Math.PI), (float)(sweep * 180 / Math.PI));
     }
 
     private static void DrawImages(SKCanvas canvas, Scene scene, Matrix2D m, BoundingBox visible)

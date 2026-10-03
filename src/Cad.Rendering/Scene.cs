@@ -11,6 +11,19 @@ public sealed class RenderBatch(CadColor color, double weight = LineWeight.Defau
     /// <summary>Spessore di linea in millimetri.</summary>
     public double Weight { get; } = weight;
     public List<Vector2[]> Polylines { get; } = [];
+
+    /// <summary>Archi e cerchi esatti (solo nelle scene costruite con archi esatti): si disegnano lisci a ogni zoom.</summary>
+    public List<RenderArc> Arcs { get; } = [];
+}
+
+/// <summary>Arco antiorario di <see cref="Sweep"/> radianti da <see cref="StartAngle"/>; con Sweep = 2π è un cerchio.</summary>
+public readonly record struct RenderArc(Vector2 Center, double Radius, double StartAngle, double Sweep)
+{
+    public bool IsCircle => Sweep >= Math.Tau - 1e-12;
+
+    public BoundingBox Bounds => IsCircle
+        ? new BoundingBox(Center - new Vector2(Radius, Radius), Center + new Vector2(Radius, Radius))
+        : new Arc2D(Center, Radius, StartAngle, StartAngle + Sweep).Bounds;
 }
 
 /// <summary>Una riga di testo già posizionata in coordinate mondo, con l'origine sulla linea di base.</summary>
@@ -78,6 +91,11 @@ public sealed class Scene
             foreach (var polyline in batch.Polylines)
             {
                 bounds = bounds.Union(BoundingBox.FromPoints(polyline));
+            }
+
+            foreach (var arc in batch.Arcs)
+            {
+                bounds = bounds.Union(arc.Bounds);
             }
         }
 

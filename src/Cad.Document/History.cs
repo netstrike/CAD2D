@@ -14,20 +14,27 @@ public sealed class DocumentEditor
         _changes = changes;
     }
 
+    /// <summary>Sotto questa soglia si cerca l'entità scorrendo l'elenco; sopra si usa una mappa delle posizioni.</summary>
+    private const int LinearSearchLimit = 256;
+
+    private PositionMap? _positions;
+
     public void Add(Entity entity)
     {
+        _positions?.Append(entity);
         _document.ModelSpace.Add(entity);
         _changes.Add(new Change(ChangeKind.Added, entity, null, _document.ModelSpace.Count - 1));
     }
 
     public void Remove(Entity entity)
     {
-        var index = _document.ModelSpace.IndexOf(entity);
+        var index = IndexOf(entity);
         if (index < 0)
         {
             return;
         }
 
+        _positions?.Remove(entity);
         _document.ModelSpace.RemoveAt(index);
         _changes.Add(new Change(ChangeKind.Removed, entity, null, index));
     }
@@ -35,14 +42,32 @@ public sealed class DocumentEditor
     /// <summary>Sostituisce un'entità con la sua versione modificata, nella stessa posizione dell'elenco.</summary>
     public void Replace(Entity original, Entity replacement)
     {
-        var index = _document.ModelSpace.IndexOf(original);
+        var index = IndexOf(original);
         if (index < 0)
         {
             return;
         }
 
+        _positions?.Replace(original, replacement);
+
         _document.ModelSpace[index] = replacement;
         _changes.Add(new Change(ChangeKind.Replaced, original, replacement, index));
+    }
+
+    /// <summary>
+    /// Posizione di un'entità nel modello. Con migliaia di entità (SPOSTA o CANCELLA di tutto un disegno grande) la
+    /// ricerca lineare a ogni entità diventerebbe quadratica: si usa la mappa delle posizioni.
+    /// </summary>
+    private int IndexOf(Entity entity)
+    {
+        var model = _document.ModelSpace;
+        if (_positions is null && model.Count < LinearSearchLimit)
+        {
+            return model.IndexOf(entity);
+        }
+
+        _positions ??= new PositionMap(model);
+        return _positions.IndexOf(entity);
     }
 
     /// <summary>
@@ -167,5 +192,95 @@ public sealed class UndoHistory
         _undo.Push(unit);
         _document.RaiseChanged();
         return unit.Name;
+    }
+}
+
+/// <summary>
+/// Posizioni delle entità durante una modifica: ogni entità ha una posizione "virtuale" fissa e un albero di Fenwick
+/// conta le rimozioni prima di ciascuna, così la posizione reale si trova in tempo logaritmico anche dopo molte rimozioni.
+/// </summary>
+internal sealed class PositionMap
+{
+    private readonly Dictionary<Entity, int> _virtual = new(ReferenceEqualityComparer.Instance);
+    private int[] _removed;
+    private int _next;
+
+    public PositionMap(List<Entity> model)
+    {
+        for (var i = 0; i < model.Count; i++)
+        {
+            _virtual.TryAdd(model[i], i);
+        }
+
+        _next = model.Count;
+        _removed = new int[Math.Max(16, model.Count * 2) + 1];
+    }
+
+    public int IndexOf(Entity entity) =>
+        _virtual.TryGetValue(entity, out var position) ? position - RemovedBefore(position) : -1;
+
+    public void Append(Entity entity)
+    {
+        if (_next + 1 >= _removed.Length)
+        {
+            Grow();
+        }
+
+        _virtual.TryAdd(entity, _next++);
+    }
+
+    public void Remove(Entity entity)
+    {
+        if (_virtual.Remove(entity, out var position))
+        {
+            for (var i = position + 1; i < _removed.Length; i += i & -i)
+            {
+                _removed[i]++;
+            }
+        }
+    }
+
+    public void Replace(Entity original, Entity replacement)
+    {
+        if (_virtual.Remove(original, out var position))
+        {
+            _virtual[replacement] = position;
+        }
+    }
+
+    /// <summary>Rimozioni nelle posizioni virtuali da 0 a position - 1.</summary>
+    private int RemovedBefore(int position)
+    {
+        var sum = 0;
+        for (var i = position; i > 0; i -= i & -i)
+        {
+            sum += _removed[i];
+        }
+
+        return sum;
+    }
+
+    private void Grow()
+    {
+        // Si ricostruisce l'albero più grande a partire dai conteggi puntuali.
+        var counts = new int[_next];
+        for (var p = 0; p < _next; p++)
+        {
+            counts[p] = RemovedBefore(p + 1) - RemovedBefore(p);
+        }
+
+        _removed = new int[_removed.Length * 2];
+        for (var p = 0; p < counts.Length; p++)
+        {
+            if (counts[p] == 0)
+            {
+                continue;
+            }
+
+            for (var i = p + 1; i < _removed.Length; i += i & -i)
+            {
+                _removed[i] += counts[p];
+            }
+        }
     }
 }

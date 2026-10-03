@@ -612,12 +612,19 @@ public static class DxfImporter
             return definition;
         }
 
-        private static PolylinePathEntity? ConvertSpline(AcadEntities.Spline spline, Layer layer)
+        private static Entity? ConvertSpline(AcadEntities.Spline spline, Layer layer)
         {
             // Le spline definite solo da punti di passaggio vanno prima convertite in punti di controllo.
             if (spline.ControlPoints.Count == 0 && spline.FitPoints.Count > 1)
             {
                 spline.UpdateFromFitPoints(SplineFitIterations);
+            }
+
+            // Se grado, punti e nodi tornano si tiene la spline vera; i pesi solo se sono uno per punto.
+            if (spline.Degree >= 1 && spline.ControlPoints.Count > spline.Degree && spline.Knots.Count == spline.ControlPoints.Count + spline.Degree + 1)
+            {
+                var weights = spline.Weights.Count == spline.ControlPoints.Count && spline.Weights.Any(w => w != 1) ? spline.Weights : null;
+                return new SplineEntity(layer, spline.Degree, spline.ControlPoints.Select(ToVector), spline.Knots, weights, spline.IsClosed);
             }
 
             if (spline.TryPolygonalVertexes(SplinePrecision, out var points) && points.Count > 1)

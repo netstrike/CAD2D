@@ -87,6 +87,10 @@
         <MenuItem Header="_Cerchio" Click="OnMenuCommand" Tag="CERCHIO" />
         <MenuItem Header="_Arco" Click="OnMenuCommand" Tag="ARCO" />
         <MenuItem Header="_Rettangolo" Click="OnMenuCommand" Tag="RETTANGOLO" />
+        <MenuItem Header="P_oligono" Click="OnMenuCommand" Tag="POLIGONO" />
+        <MenuItem Header="_Ellisse" Click="OnMenuCommand" Tag="ELLISSE" />
+        <MenuItem Header="_Spline" Click="OnMenuCommand" Tag="SPLINE" />
+        <MenuItem Header="P_unto" Click="OnMenuCommand" Tag="PUNTO" />
         <Separator />
         <MenuItem Header="_Tratteggio..." Click="OnMenuCommand" Tag="DLGTRATTEGGIO" />
         <Separator />

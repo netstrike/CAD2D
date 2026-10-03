@@ -45,6 +45,8 @@ public static class SnapEngine
         }
 
         var primitives = new List<Primitive>();
+        var owners = new List<int>();
+        var owner = 0;
         var best = (SnapResult?)null;
         var bestDistance = double.PositiveInfinity;
 
@@ -77,6 +79,7 @@ public static class SnapEngine
 
         foreach (var entity in candidates)
         {
+            owner++;
             switch (entity)
             {
                 case PointEntity point:
@@ -90,6 +93,11 @@ public static class SnapEngine
                     break;
                 case EllipseEntity ellipse:
                     Consider(ellipse.Center, SnapModes.Center);
+                    EllipsePoints(ellipse, Consider);
+                    break;
+                case SplineEntity spline when !spline.IsClosed:
+                    Consider(spline.StartPoint, SnapModes.Endpoint);
+                    Consider(spline.EndPoint, SnapModes.Endpoint);
                     break;
             }
 
@@ -101,6 +109,7 @@ public static class SnapEngine
                 }
 
                 primitives.Add(primitive);
+                owners.Add(owner);
                 if ((modes & SnapModes.Nearest) != 0)
                 {
                     var near = Nearest(primitive, cursor);
@@ -113,10 +122,14 @@ public static class SnapEngine
 
                 switch (primitive)
                 {
-                    case SegmentPrimitive { Segment: var s }:
-                        Consider(s.Start, SnapModes.Endpoint);
-                        Consider(s.End, SnapModes.Endpoint);
-                        Consider(s.Midpoint, SnapModes.Midpoint);
+                    case SegmentPrimitive { Segment: var s } segment:
+                        if (!segment.Approximate)
+                        {
+                            Consider(s.Start, SnapModes.Endpoint);
+                            Consider(s.End, SnapModes.Endpoint);
+                            Consider(s.Midpoint, SnapModes.Midpoint);
+                        }
+
                         if (basePoint is { } b)
                         {
                             var t = s.Project(b);
@@ -188,6 +201,12 @@ public static class SnapEngine
             {
                 for (var j = i + 1; j < primitives.Count; j++)
                 {
+                    // I tratti di una stessa curva spezzata si toccano solo nei vertici della spezzata: non sono intersezioni.
+                    if (owners[i] == owners[j] && primitives[i] is SegmentPrimitive { Approximate: true } && primitives[j] is SegmentPrimitive { Approximate: true })
+                    {
+                        continue;
+                    }
+
                     foreach (var point in Intersect(primitives[i], primitives[j]))
                     {
                         Consider(point, SnapModes.Intersection);
@@ -255,4 +274,26 @@ public static class SnapEngine
 
     private static IReadOnlyList<Vector2> OnArc(IReadOnlyList<Vector2> points, ArcPrimitive arc) =>
         arc.IsFullCircle ? points : [.. points.Where(p => arc.Arc.ContainsAngle((p - arc.Arc.Center).Angle))];
+
+    /// <summary>Quadranti (estremi degli assi) e, per un arco di ellisse, estremi e punto medio.</summary>
+    private static void EllipsePoints(EllipseEntity ellipse, Action<Vector2, SnapModes> consider)
+    {
+        var sweep = ellipse.Sweep;
+        var full = sweep >= Math.Tau - Tolerance.Default;
+        for (var q = 0; q < 4; q++)
+        {
+            var t = q * Math.PI / 2;
+            if (full || Arc2D.NormalizeAngle(t - ellipse.StartParameter) <= sweep)
+            {
+                consider(ellipse.PointAt(t), SnapModes.Quadrant);
+            }
+        }
+
+        if (!full)
+        {
+            consider(ellipse.PointAt(ellipse.StartParameter), SnapModes.Endpoint);
+            consider(ellipse.PointAt(ellipse.StartParameter + sweep), SnapModes.Endpoint);
+            consider(ellipse.PointAt(ellipse.StartParameter + sweep / 2), SnapModes.Midpoint);
+        }
+    }
 }

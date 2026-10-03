@@ -9,7 +9,8 @@ public abstract record Primitive
     public abstract double DistanceTo(Vector2 p);
 }
 
-public sealed record SegmentPrimitive(Segment2D Segment) : Primitive
+/// <param name="Approximate">Tratto di una curva spezzata (ellisse, spline): i suoi estremi e il punto medio non sono punti notevoli.</param>
+public sealed record SegmentPrimitive(Segment2D Segment, bool Approximate = false) : Primitive
 {
     public override double DistanceTo(Vector2 p) => Segment.DistanceTo(p);
 }
@@ -66,8 +67,16 @@ public static class EntityGeometry
                 for (var i = 1; i <= CurveSteps; i++)
                 {
                     var next = ellipse.PointAt(ellipse.StartParameter + ellipse.Sweep * i / CurveSteps);
-                    yield return new SegmentPrimitive(new Segment2D(previous, next));
+                    yield return new SegmentPrimitive(new Segment2D(previous, next), Approximate: true);
                     previous = next;
+                }
+
+                break;
+            case SplineEntity spline:
+                var points = spline.Flatten();
+                for (var i = 1; i < points.Count; i++)
+                {
+                    yield return new SegmentPrimitive(new Segment2D(points[i - 1], points[i]), Approximate: true);
                 }
 
                 break;

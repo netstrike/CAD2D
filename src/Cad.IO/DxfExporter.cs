@@ -513,6 +513,7 @@ public static class DxfExporter
                 CircleEntity circle => new AcadEntities.Circle { Center = ToXyz(circle.Center), Radius = circle.Radius },
                 ArcEntity arc => new AcadEntities.Arc { Center = ToXyz(arc.Center), Radius = arc.Radius, StartAngle = arc.StartAngle, EndAngle = arc.EndAngle },
                 EllipseEntity ellipse => ConvertEllipse(ellipse),
+                SplineEntity spline => ConvertSpline(spline),
                 PolylineEntity polyline => ConvertPolyline(polyline),
                 PolylinePathEntity path => ConvertPolyline(new PolylineEntity(path.Layer, path.Points.Select(p => new PolylineVertex(p)), path.IsClosed)),
                 PointEntity point => new AcadEntities.Point { Location = ToXyz(point.Position) },
@@ -803,6 +804,23 @@ public static class DxfExporter
                 EndParameter = ellipse.EndParameter,
                 Normal = new XYZ(0, 0, normalZ),
             };
+        }
+
+        /// <summary>
+        /// Si scrivono solo punti di controllo e nodi: con i punti di passaggio il DWG salverebbe soltanto quelli e chi
+        /// lo riapre ricalcolerebbe una curva diversa (e aperta).
+        /// </summary>
+        private static AcadEntities.Spline ConvertSpline(SplineEntity spline)
+        {
+            var result = new AcadEntities.Spline { Degree = spline.Degree, Normal = XYZ.AxisZ };
+            result.Flags = AcadEntities.SplineFlags.Planar
+                | (spline.IsClosed ? AcadEntities.SplineFlags.Closed : 0)
+                | (spline.IsPeriodic ? AcadEntities.SplineFlags.Periodic : 0)
+                | (spline.Weights.Count > 0 ? AcadEntities.SplineFlags.Rational : 0);
+            result.ControlPoints.AddRange(spline.ControlPoints.Select(ToXyz));
+            result.Knots.AddRange(spline.Knots);
+            result.Weights.AddRange(spline.Weights);
+            return result;
         }
 
         private static AcadEntities.LwPolyline ConvertPolyline(PolylineEntity polyline)

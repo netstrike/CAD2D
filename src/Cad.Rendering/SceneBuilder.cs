@@ -14,13 +14,35 @@ public static class SceneBuilder
 
     private const int MaxDepth = 32;
 
-    public static Scene Build(CadDocument document)
+    /// <param name="exactArcs">
+    /// Cerchi, archi e tratti curvi delle polilinee a linea continua restano archi veri invece di spezzate: molti meno
+    /// punti e curve lisce a qualunque zoom. Chi legge solo <see cref="RenderBatch.Polylines"/> deve lasciarlo spento.
+    /// </param>
+    /// <param name="cache">Pezzi della ricostruzione precedente: con un disegno grande si ricalcola solo ciò che è cambiato.</param>
+    public static Scene Build(CadDocument document, bool exactArcs = false, SceneCache? cache = null)
     {
-        var builder = new Builder { LinetypeScale = document.LinetypeScale };
+        var builder = new Builder { LinetypeScale = document.LinetypeScale, ExactArcs = exactArcs };
         var root = new Context(Matrix2D.Identity, null, CadColor.White, Linetype.Continuous, 0, LineWeight.DefaultValue);
+        cache?.Validate(document, exactArcs);
+        var single = new Builder { LinetypeScale = document.LinetypeScale, ExactArcs = exactArcs };
         foreach (var entity in document.ModelSpace)
         {
-            builder.Add(entity, root);
+            if (cache is null || !SceneCache.IsCacheable(entity))
+            {
+                builder.Add(entity, root);
+                continue;
+            }
+
+            var fragment = cache.Find(entity);
+            if (fragment is null)
+            {
+                single.Add(entity, root);
+                fragment = single.ToFragment(entity);
+                single.Clear();
+                cache.Store(entity, fragment);
+            }
+
+            builder.Merge(fragment);
         }
 
         return builder.ToScene();
@@ -61,9 +83,58 @@ public static class SceneBuilder
         public bool IgnoreVisibility { get; init; }
         public bool IgnoreLinetypes { get; init; }
         public bool HatchOutlinesOnly { get; init; }
+        public bool ExactArcs { get; init; }
         public double LinetypeScale { get; init; } = 1;
 
         public Scene ToScene() => new([.. Batches.Values], Texts, Points, EntityCount, [.. Fills.Values], Images);
+
+        public SceneCache.Fragment ToFragment(Entity entity) => new(
+            SceneCache.Style.Of(entity),
+            [.. Batches.Select(b => (b.Key.Item1, b.Key.Item2, b.Value.Polylines.ToArray(), b.Value.Arcs.ToArray()))],
+            [.. Fills.Select(f => (f.Key, f.Value.Rings.ToArray()))],
+            [.. Points],
+            EntityCount);
+
+        /// <summary>Torna vuoto per calcolare il pezzo dell'entità successiva senza allocare un costruttore nuovo.</summary>
+        public void Clear()
+        {
+            Batches.Clear();
+            Fills.Clear();
+            Points.Clear();
+            Texts.Clear();
+            Images.Clear();
+            EntityCount = 0;
+        }
+
+        public void Merge(SceneCache.Fragment fragment)
+        {
+            foreach (var (color, weight, polylines, arcs) in fragment.Batches)
+            {
+                if (!Batches.TryGetValue((color, weight), out var batch))
+                {
+                    batch = new RenderBatch(color, weight / 100.0);
+                    Batches.Add((color, weight), batch);
+                }
+
+                batch.Polylines.AddRange(polylines);
+                batch.Arcs.AddRange(arcs);
+            }
+
+            foreach (var (color, rings) in fragment.Fills)
+            {
+                if (!Fills.TryGetValue(color, out var fill))
+                {
+                    fill = new FillBatch(color);
+                    Fills.Add(color, fill);
+                }
+
+                // Gli anelli sono già orientati.
+                fill.Rings.AddRange(rings);
+            }
+
+            Points.AddRange(fragment.Points);
+            EntityCount += fragment.EntityCount;
+        }
 
         public void Add(Entity entity, Context context)
         {
@@ -132,6 +203,15 @@ public static class SceneBuilder
                 case LineEntity line:
                     AddCurve(color, [m.Transform(line.Start), m.Transform(line.End)], dash, dashScale);
                     break;
+                case CircleEntity circle when dash is null && ExactArcs && IsConformal(m):
+                    AddArc(color, new Arc2D(circle.Center, circle.Radius, 0, Math.Tau), m);
+                    break;
+                case ArcEntity arc when dash is null && ExactArcs && IsConformal(m):
+                    AddArc(color, arc.Arc, m);
+                    break;
+                case PolylineEntity polyline when dash is null && ExactArcs && IsConformal(m) && polyline.Vertices.Any(v => v.Bulge != 0):
+                    AddPolylineWithArcs(color, polyline, m);
+                    break;
                 case CircleEntity circle:
                     AddCurve(color, Tessellate(new Arc2D(circle.Center, circle.Radius, 0, Math.Tau), m), dash, dashScale);
                     break;
@@ -143,6 +223,9 @@ public static class SceneBuilder
                     break;
                 case PolylineEntity polyline:
                     AddCurve(color, Tessellate(polyline, m), dash, dashScale);
+                    break;
+                case SplineEntity spline:
+                    AddCurve(color, [.. spline.Flatten().Select(m.Transform)], dash, dashScale);
                     break;
                 case PolylinePathEntity path:
                     AddCurve(color, [.. path.Points.Select(m.Transform), .. path.IsClosed && path.Points.Count > 0 ? [m.Transform(path.Points[0])] : Array.Empty<Vector2>()], dash, dashScale);
@@ -233,6 +316,64 @@ public static class SceneBuilder
             }
         }
 
+        private RenderBatch BatchFor(CadColor color)
+        {
+            var key = (color, _weight);
+            if (!Batches.TryGetValue(key, out var batch))
+            {
+                batch = new RenderBatch(color, _weight / 100.0);
+                Batches.Add(key, batch);
+            }
+
+            return batch;
+        }
+
+        /// <summary>Arco antiorario trasformato da una matrice conforme; una simmetria lo fa percorrere al contrario.</summary>
+        private void AddArc(CadColor color, Arc2D arc, Matrix2D m)
+        {
+            var sweep = arc.Sweep;
+            var center = m.Transform(arc.Center);
+            var radius = arc.Radius * Math.Sqrt(Math.Abs(m.Determinant));
+            var from = m.Determinant >= 0 ? arc.StartPoint : arc.EndPoint;
+            var start = sweep >= Math.Tau - 1e-12 ? 0 : (m.Transform(from) - center).Angle;
+            BatchFor(color).Arcs.Add(new RenderArc(center, radius, start, sweep));
+        }
+
+        /// <summary>Polilinea con tratti curvi: i tratti dritti consecutivi restano spezzate, ogni tratto curvo diventa un arco.</summary>
+        private void AddPolylineWithArcs(CadColor color, PolylineEntity polyline, Matrix2D m)
+        {
+            var run = new List<Vector2> { m.Transform(polyline.Vertices[0].Position) };
+            for (var i = 0; i < polyline.SegmentCount; i++)
+            {
+                var (segment, arc) = polyline.GetSegment(i);
+                if (arc is { } a)
+                {
+                    if (run.Count > 1)
+                    {
+                        AddPolyline(color, [.. run]);
+                    }
+
+                    AddArc(color, a, m);
+                    run.Clear();
+                }
+
+                run.Add(m.Transform(segment.End));
+            }
+
+            if (run.Count > 1)
+            {
+                AddPolyline(color, [.. run]);
+            }
+        }
+
+        /// <summary>Rotazione, scala uniforme, simmetria e traslazione: un cerchio resta un cerchio.</summary>
+        private static bool IsConformal(Matrix2D m)
+        {
+            var x = m.TransformVector(Vector2.UnitX);
+            var y = m.TransformVector(Vector2.UnitY);
+            return Math.Abs(x.Length - y.Length) <= 1e-9 * Math.Max(1, x.Length) && Math.Abs(Vector2.Dot(x, y)) <= 1e-9 * Math.Max(1, x.LengthSquared);
+        }
+
         private void AddFill(CadColor color, IReadOnlyList<Vector2[]> rings)
         {
             if (!Fills.TryGetValue(color, out var batch))
@@ -284,13 +425,7 @@ public static class SceneBuilder
                 return;
             }
 
-            if (!Batches.TryGetValue((color, _weight), out var batch))
-            {
-                batch = new RenderBatch(color, _weight / 100.0);
-                Batches.Add((color, _weight), batch);
-            }
-
-            batch.Polylines.Add(points);
+            BatchFor(color).Polylines.Add(points);
         }
 
         private void AddText(TextEntity text, Matrix2D m, CadColor color)

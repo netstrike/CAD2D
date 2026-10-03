@@ -14,7 +14,7 @@ namespace Cad.App.Controls;
 /// <summary>
 /// Disegna la scena e la sovrapposizione con SkiaSharp sul thread di rendering di Avalonia.
 /// </summary>
-internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Overlay overlay, Matrix2D worldToScreen, BoundingBox visibleWorld)
+internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Overlay overlay, Matrix2D worldToScreen, BoundingBox visibleWorld, SceneRaster? raster = null)
     : ICustomDrawOperation
 {
     /// <summary>Testi più bassi di così (in pixel) non sono leggibili e non si disegnano.</summary>
@@ -62,17 +62,42 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
         var canvas = lease.SkCanvas;
         canvas.Save();
         canvas.ClipRect(new SKRect(0, 0, (float)bounds.Width, (float)bounds.Height));
-        canvas.Clear(Background);
 
+        // Il disegno si ridisegna solo se cambiano scena o vista: muovere il cursore ridipinge solo la sovrapposizione.
+        var device = canvas.TotalMatrix;
+        if (raster is null || device.SkewX != 0 || device.SkewY != 0 ||
+            !raster.Draw(canvas, new SceneRaster.Key(geometry, overlay.Highlight, worldToScreen, bounds.Width, bounds.Height, device.ScaleX, device.ScaleY, overlay.GridSpacing, overlay.ShowLineweights, lease.GrContext), DrawScene))
+        {
+            DrawScene(canvas);
+        }
+
+        DrawOverlay(canvas);
+        canvas.Restore();
+    }
+
+    private void DrawScene(SKCanvas canvas)
+    {
+        canvas.Clear(Background);
         DrawGrid(canvas);
         DrawOriginMarker(canvas);
         DrawImages(canvas);
         DrawPaths(canvas);
         DrawPoints(canvas);
         DrawTexts(canvas);
-        DrawOverlay(canvas);
+        DrawSelection(canvas);
+    }
 
-        canvas.Restore();
+    /// <summary>Selezione: le entità selezionate ripassate tratteggiate. Cambia solo con la selezione, quindi sta con il disegno.</summary>
+    private void DrawSelection(SKCanvas canvas)
+    {
+        if (overlay.Highlight.Count == 0)
+        {
+            return;
+        }
+
+        using var dash = SKPathEffect.CreateDash([6, 4], 0);
+        using var stroke = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.5f, Color = HighlightColor, PathEffect = dash };
+        DrawPolylines(canvas, overlay.Highlight, stroke);
     }
 
     private void DrawPaths(SKCanvas canvas)
@@ -177,18 +202,6 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
             stroke.Color = HighlightColor;
             stroke.StrokeWidth = 2.5f;
             DrawPolylines(canvas, overlay.Hover, stroke);
-            stroke.StrokeWidth = 1;
-        }
-
-        // Selezione: le entità selezionate ripassate tratteggiate.
-        if (overlay.Highlight.Count > 0)
-        {
-            using var dash = SKPathEffect.CreateDash([6, 4], 0);
-            stroke.Color = HighlightColor;
-            stroke.StrokeWidth = 1.5f;
-            stroke.PathEffect = dash;
-            DrawPolylines(canvas, overlay.Highlight, stroke);
-            stroke.PathEffect = null;
             stroke.StrokeWidth = 1;
         }
 
@@ -486,5 +499,66 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
         canvas.DrawLine(x, y, x + length, y, paint);
         paint.Color = AxisYColor;
         canvas.DrawLine(x, y, x, y - length, paint);
+    }
+}
+
+/// <summary>
+/// Il disegno già dipinto in una superficie fuori schermo, grande quanto la vista in pixel del dispositivo. Finché scena e
+/// vista non cambiano basta ricopiarla: con centomila entità muovere il cursore non ridisegna tutto. Si usa solo dal thread
+/// di rendering.
+/// </summary>
+internal sealed class SceneRaster : IDisposable
+{
+    private SKSurface? _surface;
+    private Key? _key;
+
+    public readonly record struct Key(
+        SceneGeometry Geometry, IReadOnlyList<Vector2[]> Highlight, Matrix2D View, double Width, double Height, float ScaleX, float ScaleY, double Grid, bool Lineweights, GRContext? Context);
+
+    /// <summary>Copia il disegno sulla tela, ridipingendolo prima se serve; false se la superficie non si può creare.</summary>
+    public bool Draw(SKCanvas canvas, Key key, Action<SKCanvas> paint)
+    {
+        if (_key != key || _surface is null)
+        {
+            var width = (int)Math.Ceiling(key.Width * key.ScaleX);
+            var height = (int)Math.Ceiling(key.Height * key.ScaleY);
+            if (width <= 0 || height <= 0)
+            {
+                return false;
+            }
+
+            if (_surface is null || _key is not { } old || old.Context != key.Context ||
+                (int)Math.Ceiling(old.Width * old.ScaleX) != width || (int)Math.Ceiling(old.Height * old.ScaleY) != height)
+            {
+                _surface?.Dispose();
+                var info = new SKImageInfo(width, height, SKImageInfo.PlatformColorType, SKAlphaType.Premul);
+                _surface = key.Context is { } context ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
+                if (_surface is null)
+                {
+                    _key = null;
+                    return false;
+                }
+            }
+
+            var target = _surface.Canvas;
+            target.ResetMatrix();
+            target.Scale(key.ScaleX, key.ScaleY);
+            paint(target);
+            target.Flush();
+            _key = key;
+        }
+
+        canvas.Save();
+        canvas.Scale(1 / key.ScaleX, 1 / key.ScaleY);
+        canvas.DrawSurface(_surface, 0, 0);
+        canvas.Restore();
+        return true;
+    }
+
+    public void Dispose()
+    {
+        _surface?.Dispose();
+        _surface = null;
+        _key = null;
     }
 }

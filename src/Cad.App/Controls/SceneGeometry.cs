@@ -46,6 +46,11 @@ internal sealed class SceneGeometry : IDisposable
                 }
             }
 
+            foreach (var arc in batch.Arcs)
+            {
+                AddArc(path, arc, origin);
+            }
+
             paths.Add((ToSkColor(batch.Color, light), path, batch.Weight));
         }
 
@@ -70,6 +75,21 @@ internal sealed class SceneGeometry : IDisposable
         }
 
         return new SceneGeometry(scene, origin, paths, fills) { Light = light };
+    }
+
+    /// <summary>Arco o cerchio esatto: Skia lo disegna con poche coniche, liscio a ogni zoom.</summary>
+    public static void AddArc(SKPath path, RenderArc arc, Vector2 origin)
+    {
+        var c = arc.Center - origin;
+        var r = (float)arc.Radius;
+        if (arc.IsCircle)
+        {
+            path.AddCircle((float)c.X, (float)c.Y, r);
+            return;
+        }
+
+        var oval = new SKRect((float)c.X - r, (float)c.Y - r, (float)c.X + r, (float)c.Y + r);
+        path.AddArc(oval, (float)(arc.StartAngle * 180 / Math.PI), (float)(arc.Sweep * 180 / Math.PI));
     }
 
     /// <summary>Colori pensati per lo sfondo chiaro (bianco diventa nero).</summary>

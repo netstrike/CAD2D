@@ -34,6 +34,9 @@ public static class Hatching
             case EllipseEntity ellipse when ellipse.Sweep >= Math.Tau - 1e-9:
                 return [.. Enumerable.Range(0, EllipseSteps).Select(i => new PolylineVertex(ellipse.PointAt(ellipse.StartParameter + Math.Tau * i / EllipseSteps)))];
 
+            case SplineEntity spline when spline.IsClosed || spline.StartPoint.IsAlmostEqual(spline.EndPoint, 1e-7):
+                return [.. spline.Flatten().SkipLast(1).Select(p => new PolylineVertex(p))];
+
             case PolylinePathEntity path when path.IsClosed && path.Points.Count >= 3:
                 return [.. path.Points.Select(p => new PolylineVertex(p))];
 

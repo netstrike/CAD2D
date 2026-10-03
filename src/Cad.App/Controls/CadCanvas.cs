@@ -40,6 +40,16 @@ public sealed class CadCanvas : Control
 
     private Editor? _editor;
     private SceneGeometry _geometry = SceneGeometry.Empty;
+
+    /// <summary>Pezzi di scena del documento mostrato: dopo un comando si ricalcola solo ciò che è cambiato.</summary>
+    private SceneCache _sceneCache = new();
+
+    /// <summary>Il disegno dipinto fuori schermo, ricopiato quando cambia solo la sovrapposizione (cursore, anteprime).</summary>
+    private readonly SceneRaster _raster = new();
+
+    /// <summary>Selezione ripassata: si ricalcola solo quando cambiano selezione o disegno, non a ogni movimento del mouse.</summary>
+    private IReadOnlyList<Vector2[]> _highlight = [];
+    private bool _highlightStale = true;
     private Overlay _overlay = Overlay.Empty;
     private Point? _panOrigin;
     private Vector2? _pointerWorld;
@@ -64,15 +74,16 @@ public sealed class CadCanvas : Control
             {
                 _editor.Document.Changed -= OnDocumentChanged;
                 _editor.StateChanged -= OnEditorStateChanged;
-                _editor.Selection.Changed -= OnEditorStateChanged;
+                _editor.Selection.Changed -= OnSelectionChanged;
             }
 
             _editor = value;
+            _sceneCache = new SceneCache();
             if (_editor is not null)
             {
                 _editor.Document.Changed += OnDocumentChanged;
                 _editor.StateChanged += OnEditorStateChanged;
-                _editor.Selection.Changed += OnEditorStateChanged;
+                _editor.Selection.Changed += OnSelectionChanged;
             }
 
             RefreshScene();
@@ -90,7 +101,8 @@ public sealed class CadCanvas : Control
     public void RefreshScene()
     {
         // La geometria precedente non si libera esplicitamente: il thread di rendering potrebbe ancora disegnarla.
-        _geometry = _editor is null ? SceneGeometry.Empty : SceneGeometry.Build(SceneBuilder.Build(_editor.Document), LightBackground);
+        _highlightStale = true;
+        _geometry = _editor is null ? SceneGeometry.Empty : SceneGeometry.Build(SceneBuilder.Build(_editor.Document, exactArcs: true, _sceneCache), LightBackground);
         RefreshOverlay();
         OnViewChanged();
     }
@@ -117,7 +129,7 @@ public sealed class CadCanvas : Control
     public override void Render(DrawingContext context)
     {
         // Render non deve modificare altri controlli: la vista si aggiorna solo in OnSizeChanged e negli handler di input.
-        context.Custom(new SceneDrawOperation(new Rect(Bounds.Size), _geometry, _overlay, View.WorldToScreenMatrix, View.VisibleWorldBounds));
+        context.Custom(new SceneDrawOperation(new Rect(Bounds.Size), _geometry, _overlay, View.WorldToScreenMatrix, View.VisibleWorldBounds, _raster));
     }
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
@@ -275,6 +287,12 @@ public sealed class CadCanvas : Control
 
     private void OnEditorStateChanged(object? sender, EventArgs e) => RefreshOverlay();
 
+    private void OnSelectionChanged(object? sender, EventArgs e)
+    {
+        _highlightStale = true;
+        RefreshOverlay();
+    }
+
     /// <summary>Sfondo bianco (tema chiaro): il colore 7 si disegna nero.</summary>
     public bool LightBackground { get; set; }
 
@@ -294,9 +312,15 @@ public sealed class CadCanvas : Control
         }
 
         var selected = _editor.Selection.Items;
-        var highlight = selected.Count == 0
-            ? []
-            : SceneBuilder.BuildEntities(selected, HighlightColor).Batches.SelectMany(b => b.Polylines).ToList();
+        if (_highlightStale)
+        {
+            _highlight = selected.Count == 0
+                ? []
+                : SceneBuilder.BuildEntities(selected, HighlightColor).Batches.SelectMany(b => b.Polylines).ToList();
+            _highlightStale = false;
+        }
+
+        var highlight = _highlight;
         var grips = selected.Count is 0 or > MaxGripEntities || _editor.IsCommandActive
             ? []
             : selected.SelectMany(s => s.Grips).ToList();

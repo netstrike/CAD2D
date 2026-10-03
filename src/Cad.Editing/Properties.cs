@@ -88,6 +88,7 @@ public static class PropertySheet
         ArcEntity => "Arco",
         PolylineEntity => "Polilinea",
         EllipseEntity => "Ellisse",
+        SplineEntity => "Spline",
         TextEntity => "Testo",
         DimensionEntity => "Quota",
         LeaderEntity => "Direttrice",
@@ -227,6 +228,8 @@ public static class PropertySheet
         CircleEntity => CircleDefinitions(),
         ArcEntity => ArcDefinitions(),
         PolylineEntity => PolylineDefinitions(),
+        EllipseEntity => EllipseDefinitions(),
+        SplineEntity => SplineDefinitions(),
         TextEntity => TextDefinitions(document),
         DimensionEntity => DimensionDefinitions(),
         LeaderEntity => LeaderDefinitions(),
@@ -317,6 +320,31 @@ public static class PropertySheet
         yield return new(Geometry, "Vertici", PropertyKind.ReadOnly, e => ((PolylineEntity)e).Vertices.Count.ToString(CultureInfo.InvariantCulture));
         yield return new(Geometry, "Lunghezza", PropertyKind.ReadOnly, e => Format(Length(e)));
         yield return new(Geometry, "Area", PropertyKind.ReadOnly, e => ((PolylineEntity)e).IsClosed ? Format(PolylineArea(((PolylineEntity)e).Vertices)) : "-");
+    }
+
+    private static IEnumerable<PropertyDefinition> EllipseDefinitions()
+    {
+        foreach (var d in Point<EllipseEntity>("Centro", c => c.Center, (c, p) => MoveTo(c, c.Center, p)))
+        {
+            yield return d;
+        }
+
+        yield return new(Geometry, "Semiasse maggiore", PropertyKind.ReadOnly, e => Format(((EllipseEntity)e).MajorAxis.Length));
+        yield return new(Geometry, "Semiasse minore", PropertyKind.ReadOnly, e => Format(((EllipseEntity)e).MinorAxis.Length));
+        yield return new(Geometry, "Angolo iniziale", PropertyKind.ReadOnly, e => FormatAngle(((EllipseEntity)e).StartParameter));
+        yield return new(Geometry, "Angolo finale", PropertyKind.ReadOnly, e => FormatAngle(((EllipseEntity)e).EndParameter));
+        yield return new(Geometry, "Area", PropertyKind.ReadOnly, e => e is EllipseEntity ellipse && ellipse.Sweep >= Math.Tau - Tolerance.Default
+            ? Format(Math.PI * ellipse.MajorAxis.Length * ellipse.MinorAxis.Length)
+            : "-");
+    }
+
+    private static IEnumerable<PropertyDefinition> SplineDefinitions()
+    {
+        yield return new(Geometry, "Grado", PropertyKind.ReadOnly, e => ((SplineEntity)e).Degree.ToString(CultureInfo.InvariantCulture));
+        yield return new(Geometry, "Punti di controllo", PropertyKind.ReadOnly, e => ((SplineEntity)e).ControlPoints.Count.ToString(CultureInfo.InvariantCulture));
+        yield return new(Geometry, "Punti di passaggio", PropertyKind.ReadOnly, e => ((SplineEntity)e).FitPoints.Count.ToString(CultureInfo.InvariantCulture));
+        yield return new(Geometry, "Chiusa", PropertyKind.ReadOnly, e => ((SplineEntity)e).IsClosed ? Yes : No);
+        yield return new(Geometry, "Lunghezza", PropertyKind.ReadOnly, e => Format(((SplineEntity)e).Length));
     }
 
     private static IEnumerable<PropertyDefinition> TextDefinitions(CadDocument document)

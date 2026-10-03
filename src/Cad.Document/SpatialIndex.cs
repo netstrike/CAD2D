@@ -71,15 +71,35 @@ public sealed class SpatialIndex<T>
         var sliceCount = (int)Math.Ceiling(Math.Sqrt(parentCount));
         var sliceSize = sliceCount * NodeCapacity;
 
-        var byX = nodes.OrderBy(n => n.Bounds.Center.X).ToList();
-        var parents = new List<Node>(parentCount);
-        for (var s = 0; s < byX.Count; s += sliceSize)
+        // Ordinamenti su array con le chiavi già calcolate: con centomila entità l'indice si ricostruisce a ogni modifica.
+        var sorted = nodes.ToArray();
+        var keys = new double[sorted.Length];
+        for (var i = 0; i < sorted.Length; i++)
         {
-            var slice = byX.Skip(s).Take(sliceSize).OrderBy(n => n.Bounds.Center.Y).ToList();
-            for (var i = 0; i < slice.Count; i += NodeCapacity)
+            keys[i] = sorted[i].Bounds.Min.X + sorted[i].Bounds.Max.X;
+        }
+
+        Array.Sort(keys, sorted);
+        var parents = new List<Node>(parentCount);
+        for (var s = 0; s < sorted.Length; s += sliceSize)
+        {
+            var length = Math.Min(sliceSize, sorted.Length - s);
+            for (var i = 0; i < length; i++)
             {
-                var children = slice.Skip(i).Take(NodeCapacity).ToArray();
-                var bounds = children.Aggregate(BoundingBox.Empty, (b, c) => b.Union(c.Bounds));
+                keys[s + i] = sorted[s + i].Bounds.Min.Y + sorted[s + i].Bounds.Max.Y;
+            }
+
+            Array.Sort(keys, sorted, s, length);
+            for (var i = 0; i < length; i += NodeCapacity)
+            {
+                var children = new Node[Math.Min(NodeCapacity, length - i)];
+                Array.Copy(sorted, s + i, children, 0, children.Length);
+                var bounds = children[0].Bounds;
+                for (var c = 1; c < children.Length; c++)
+                {
+                    bounds = bounds.Union(children[c].Bounds);
+                }
+
                 parents.Add(new Node(bounds, default, children));
             }
         }

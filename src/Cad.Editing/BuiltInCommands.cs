@@ -32,6 +32,7 @@ internal static class BuiltInCommands
         AidCommands.Register(editor);
         MeasureCommands.Register(editor);
         PropertyCommands.Register(editor);
+        ShapeCommands.Register(editor);
     }
 
     private static async Task Line(Editor ed)

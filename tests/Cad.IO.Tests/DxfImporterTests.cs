@@ -38,7 +38,7 @@ public class DxfImporterTests
         Assert.Equal(6, outline.Vertices.Count);
         Assert.Equal(2, model.OfType<ArcEntity>().Count());
         Assert.Single(model.OfType<EllipseEntity>());
-        Assert.Single(model.OfType<PolylinePathEntity>());
+        Assert.Single(model.OfType<SplineEntity>());
         Assert.Equal(4, model.OfType<TextEntity>().Count());
         Assert.Equal(4, model.OfType<InsertEntity>().Count());
 

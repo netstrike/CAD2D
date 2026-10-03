@@ -156,4 +156,49 @@ public sealed class DwgTests : IDisposable
         var colour = reloaded.ModelSpace.Single().Color.Value;
         Assert.True(Math.Abs(colour.R - 250) < 40 && Math.Abs(colour.G - 130) < 40 && colour.B < 60, $"atteso arancione, ottenuto {colour}");
     }
+
+    [Theory]
+    [InlineData("forme.dwg")]
+    [InlineData("forme.dxf")]
+    public void Splines_ellipses_and_points_survive_a_round_trip(string name)
+    {
+        var document = new CadDocument();
+        var layer = document.GetOrAddLayer("0");
+        var open = SplineEntity.Through(layer, [new(0, 0), new(10, 8), new(25, -3), new(40, 6)], closed: false);
+        var closed = SplineEntity.Through(layer, [new(0, 20), new(20, 20), new(20, 30), new(0, 30)], closed: true);
+        var arc = new EllipseEntity(layer, new Vector2(60, 0), new Vector2(20, 0), new Vector2(0, 8), 0.3, 2.5);
+        document.Edit("test", e =>
+        {
+            e.Add(open);
+            e.Add(closed);
+            e.Add(arc);
+            e.Add(new PointEntity(layer, new Vector2(5, 5)));
+        });
+
+        var path = Path.Combine(_folder, name);
+        CadFile.Save(document, path);
+        var reloaded = CadFile.Load(path);
+        Assert.Empty(reloaded.Errors);
+        var model = reloaded.Document.ModelSpace;
+
+        var splines = model.OfType<SplineEntity>().ToList();
+        Assert.Equal(2, splines.Count);
+        foreach (var original in new[] { open, closed })
+        {
+            var copy = splines.Single(s => s.IsClosed == original.IsClosed);
+            Assert.Equal(original.Degree, copy.Degree);
+            Assert.Equal(original.ControlPoints.Count, copy.ControlPoints.Count);
+            for (var i = 0; i <= 20; i++)
+            {
+                var u = original.StartParameter + (original.EndParameter - original.StartParameter) * i / 20;
+                var v = copy.StartParameter + (copy.EndParameter - copy.StartParameter) * i / 20;
+                Assert.True(original.PointAt(u).IsAlmostEqual(copy.PointAt(v), 1e-6), $"{original.PointAt(u)} ≠ {copy.PointAt(v)}");
+            }
+        }
+
+        var ellipse = Assert.Single(model.OfType<EllipseEntity>());
+        Assert.True(ellipse.PointAt(ellipse.StartParameter).IsAlmostEqual(arc.PointAt(0.3), 1e-6));
+        Assert.True(ellipse.PointAt(ellipse.EndParameter).IsAlmostEqual(arc.PointAt(2.5), 1e-6));
+        Assert.Single(model.OfType<PointEntity>());
+    }
 }

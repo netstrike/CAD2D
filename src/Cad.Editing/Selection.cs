@@ -36,18 +36,19 @@ public sealed class SelectionSet
 
     public void Remove(IEnumerable<Entity> entities)
     {
-        var changed = false;
+        // Un solo passaggio sull'elenco: togliere una a una migliaia di entità sarebbe quadratico.
+        var removed = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
         foreach (var entity in entities)
         {
             if (_lookup.Remove(entity))
             {
-                _items.Remove(entity);
-                changed = true;
+                removed.Add(entity);
             }
         }
 
-        if (changed)
+        if (removed.Count > 0)
         {
+            _items.RemoveAll(removed.Contains);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }

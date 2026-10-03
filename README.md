@@ -11,12 +11,13 @@ Stack: C# su .NET 8, Avalonia per l'interfaccia, SkiaSharp per il disegno, ACadS
 | `src/Cad.Geometry` | Vettori, matrici, bounding box, segmenti, cerchi, intersezioni. Nessuna dipendenza dalla UI. |
 | `src/Cad.Document` | Modello del disegno: layer, entità, blocchi, indice spaziale (R-tree). |
 | `src/Cad.IO` | Lettura e scrittura DXF e DWG con ACadSharp, conversione dei codici di testo. Il salvataggio conserva tutto ciò che non è stato modificato. |
-| `src/Cad.Rendering` | Vista (mondo ↔ schermo) e scena pronta da disegnare: blocchi esplosi, colori risolti, curve approssimate. |
+| `src/Cad.Rendering` | Vista (mondo ↔ schermo) e scena pronta da disegnare: blocchi esplosi, colori risolti, archi esatti, pezzi riusati tra una modifica e l'altra. |
 | `src/Cad.Plot` | Stampa in scala: posizione sul foglio, PDF vettoriale, SVG, PNG e strisce di pixel per la stampante. |
 | `src/Cad.Editing` | Editor senza interfaccia (testabile): comandi, riga di comando, snap, ortho, selezione, grip. |
 | `src/Cad.App` | Applicazione Avalonia: area di disegno SkiaSharp, riga di comando, pannello layer, apertura e salvataggio. |
 | `tests/*` | Test xUnit per ogni libreria. |
 | `tools/Cad.DxfCheck` | Apre tutti i DXF di una cartella e riassume l'esito: utile per provare file reali. |
+| `tools/Cad.Bench` | Prova di velocità: crea un disegno da 100.000 entità e misura scena, disegno, clic, modifiche, salvataggio e apertura. |
 | `tools/genera_campione.py` | Rigenera `samples/demo.dxf` (richiede `pip install ezdxf`). |
 
 ## Comandi
@@ -27,9 +28,28 @@ dotnet test
 dotnet run --project src/Cad.App                      # apre samples/demo.dxf
 dotnet run --project src/Cad.App -- C:\disegni\tavola.dxf C:\disegni\pianta.dwg
 dotnet run --project tools/Cad.DxfCheck -- C:\disegni   # prova tutti i DXF e DWG di una cartella
+dotnet run -c Release --project tools/Cad.Bench         # prova di velocità con 100.000 entità
 ```
 
 ## Stato
+
+**v1 chiusa.** Ultimi comandi di disegno: ELLISSE (anche ad arco), SPLINE (passa per i punti, aperta o chiusa;
+spostando un grip la curva si ricalcola), POLIGONO (da centro inscritto o circoscritto, oppure da un lato) e PUNTO.
+Le spline lette da DXF e DWG restano spline vere e si risalvano come tali.
+
+Prova con 100.000 entità (`tools/Cad.Bench`, misurata senza scheda grafica, quindi sul PC andrà meglio):
+
+| Operazione | Prima | Dopo |
+| --- | --- | --- |
+| Ridisegno dopo un comando (scena, percorsi, indice) | 1,4 s | 0,15–0,2 s |
+| SPOSTA di tutto il disegno | 21 s | 0,2 s |
+| Muovere il cursore | ridisegnava tutto (0,3–0,5 s) | ricopia il disegno già dipinto |
+| Disegno di tutta la vista | 0,3–0,5 s | 0,03–0,07 s |
+| Punti da disegnare | 6,7 milioni | 220.000 più 46.000 archi |
+
+Cerchi, archi e tratti curvi delle polilinee si disegnano come archi veri (lisci a ogni zoom e nel PDF); dopo un
+comando la scena rifà solo le entità cambiate. Aprire o salvare 100.000 entità richiede ancora qualche secondo
+(3 s per aprire, 0,6 s per salvare in DWG, 6 s in DXF), quasi tutto dentro ACadSharp.
 
 Fase 4 (DWG e stampa): si aprono e si salvano i DWG (dalla R14 al 2018), più disegni aperti insieme in schede, e
 STAMPA porta il foglio in scala su PDF vettoriale, SVG, PNG o sulla stampante di Windows, con l'anteprima.
@@ -61,6 +81,10 @@ Fase 3 (disegno tecnico): si fa una tavola completa, con quote, tratteggi, blocc
 | CERCHIO | C, CIRCLE | centro e raggio, opzione Diametro |
 | ARCO | A, ARC | tre punti |
 | RETTANGOLO | REC, RECT | due angoli |
+| POLIGONO | POL, POLYGON | numero di lati, poi centro (Inscritto o Circoscritto e raggio) oppure Lato |
+| ELLISSE | EL, ELLIPSE | estremi di un asse e metà dell'altro; opzioni Centro e Arco (angoli iniziale e finale) |
+| SPLINE | SPL | punti di passaggio; opzioni Chiudi e Annulla, Invio per finire |
+| PUNTO | PO, POINT | uno o più punti, Invio per finire |
 | TRATTEGGIO | H, BH, HATCH | clic dentro un contorno chiuso (le isole si riconoscono da sole); opzioni Motivo, Scala, Angolo, Seleziona |
 | BLOCCO | B, BLOCK | nome, punto base, oggetti; gli oggetti diventano un'istanza del blocco |
 | INSERISCI | I, INSERT | nome (`?` per l'elenco), punto; opzioni Scala e Rotazione |
