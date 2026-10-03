@@ -514,6 +514,9 @@ public static class Modify
                     ? [.. graphics.Entities.Select(child => Inherit(child.Transformed(dimension.GraphicsTransform), child, dimension))]
                     : [.. dimension.Explode().Select(part => Inherit(part, part, dimension))];
 
+            case ICompositeEntity composite:
+                return [.. composite.Explode().Select(part => Inherit(part, part, entity))];
+
             case PolylineEntity polyline when Curve.From(polyline) is { } curve:
                 return [.. curve.Pieces.Select(p => Curve.ToEntity([p], new LineEntity(polyline.Layer, p.Start, p.End))!.CopyStyleFrom<Entity>(polyline))];
 
@@ -550,6 +553,7 @@ public static class Modify
         LineSpacing = text.LineSpacing,
         HorizontalAlignment = text.HorizontalAlignment,
         VerticalAlignment = text.VerticalAlignment,
+        Style = text.Style,
     }.CopyStyleFrom<TextEntity>(text);
 
     private static T WithStyle<T>(T entity, Entity template) where T : Entity => entity.CopyStyleFrom<T>(template);

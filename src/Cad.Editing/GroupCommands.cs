@@ -27,7 +27,7 @@ public static class GroupCommands
         {
             if (originals[i].Group is { } group && whole.ContainsKey(group))
             {
-                copies[i].Group = whole[group] ??= document.AddGroup();
+                copies[i].Group = whole[group] ??= NewUnnamedLike(document, group);
             }
             else
             {
@@ -36,6 +36,15 @@ public static class GroupCommands
         }
 
         return copies;
+    }
+
+    /// <summary>Gruppo senza nome per le copie: tiene la descrizione (per esempio "Tabella", che serve a CELLA).</summary>
+    private static CadGroup NewUnnamedLike(CadDocument document, CadGroup original)
+    {
+        var group = document.AddGroup()!;
+        group.Description = original.Description;
+        group.Selectable = original.Selectable;
+        return group;
     }
 
     /// <summary>Tutti i membri dei gruppi selezionabili degli oggetti dati (per la selezione a gruppi).</summary>

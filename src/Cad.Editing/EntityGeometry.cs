@@ -103,6 +103,16 @@ public static class EntityGeometry
                 }
 
                 break;
+            case ICompositeEntity composite when depth < MaxDepth:
+                foreach (var part in composite.Explode())
+                {
+                    foreach (var primitive in Decompose(part, depth + 1))
+                    {
+                        yield return primitive;
+                    }
+                }
+
+                break;
             case SolidEntity solid:
                 for (var i = 0; i < solid.Corners.Count; i++)
                 {

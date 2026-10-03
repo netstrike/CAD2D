@@ -62,6 +62,7 @@ public static class DxfImporter
         var converter = new Converter(new CadDocument { Source = dxfSource });
         converter.ConvertLinetypes(source);
         converter.ConvertLayers(source);
+        converter.ConvertTextStyles(source);
         var converted = new Dictionary<Acad.Entities.Entity, Entity>(ReferenceEqualityComparer.Instance);
         foreach (var entity in source.Entities)
         {
@@ -105,8 +106,50 @@ public static class DxfImporter
     private sealed class Converter(CadDocument document)
     {
         private readonly HashSet<string> _convertedBlocks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _convertedTextStyles = new(StringComparer.OrdinalIgnoreCase);
 
         public CadDocument Document { get; } = document;
+
+        /// <summary>Stili di testo del file; quello corrente del file diventa corrente anche qui.</summary>
+        public void ConvertTextStyles(Acad.CadDocument source)
+        {
+            foreach (var style in source.TextStyles)
+            {
+                if (string.IsNullOrEmpty(style.Name) || style.IsShapeFile)
+                {
+                    continue;
+                }
+
+                ConvertTextStyle(style);
+            }
+
+            if (source.Header.CurrentTextStyleName is { Length: > 0 } current && Document.FindTextStyle(current) is { } found)
+            {
+                Document.CurrentTextStyle = found;
+            }
+        }
+
+        private TextStyle? ConvertTextStyle(Acad.Tables.TextStyle? source)
+        {
+            if (source is null || string.IsNullOrEmpty(source.Name))
+            {
+                return null;
+            }
+
+            if (Document.FindTextStyle(source.Name) is { } known && _convertedTextStyles.Contains(source.Name))
+            {
+                return known;
+            }
+
+            var style = Document.GetOrAddTextStyle(source.Name);
+            _convertedTextStyles.Add(source.Name);
+            style.FontFile = string.IsNullOrWhiteSpace(source.Filename) ? null : source.Filename;
+            style.FontFamily = TextStyle.FamilyFromFile(source.Filename);
+            style.Height = source.Height > 0 ? source.Height : 0;
+            style.WidthFactor = source.Width > 0 ? source.Width : 1;
+            style.ObliqueAngle = source.ObliqueAngle;
+            return style;
+        }
 
         public void ConvertLinetypes(Acad.CadDocument source)
         {
@@ -243,10 +286,24 @@ public static class DxfImporter
                     return new PointEntity(layer, ToVector(point.Location));
 
                 case AcadEntities.TextEntity text:
-                    return ConvertText(text, layer);
+                {
+                    var converted = ConvertText(text, layer);
+                    converted.Style = ConvertTextStyle(text.Style);
+                    return converted;
+                }
 
                 case AcadEntities.MText mtext:
-                    return ConvertMText(mtext, layer);
+                {
+                    var converted = ConvertMText(mtext, layer);
+                    converted.Style = ConvertTextStyle(mtext.Style);
+                    return converted;
+                }
+
+                case AcadEntities.Leader leader when leader.Vertices.Count >= 2 && leader.Normal.Z > 0.999:
+                    return new LeaderEntity(layer, leader.Vertices.Select(ToVector), ConvertDimensionStyle(leader.Style))
+                    {
+                        HasArrow = leader.ArrowHeadEnabled,
+                    };
 
                 case AcadEntities.Insert insert:
                     return ConvertInsert(insert, layer, depth);
@@ -327,6 +384,21 @@ public static class DxfImporter
                     Second = ToVector(angular.SecondPoint),
                     Location = ToVector(angular.DefinitionPoint),
                 },
+                AcadEntities.DimensionOrdinate ordinate => new DimensionEntity(layer, DimensionKind.Ordinate, style)
+                {
+                    Vertex = ToVector(ordinate.DefinitionPoint),
+                    First = ToVector(ordinate.FeatureLocation),
+                    Second = ToVector(ordinate.LeaderEndpoint),
+                    Location = ToVector(ordinate.LeaderEndpoint),
+                    OrdinateX = ordinate.IsOrdinateTypeX,
+                },
+                AcadEntities.DimensionArc arc => new DimensionEntity(layer, DimensionKind.ArcLength, style)
+                {
+                    Vertex = ToVector(arc.Center),
+                    First = ToVector(arc.FirstPoint),
+                    Second = ToVector(arc.SecondPoint),
+                    Location = ToVector(arc.DefinitionPoint),
+                },
                 _ => null,
             };
 
@@ -359,6 +431,7 @@ public static class DxfImporter
                 style.Decimals = source.DecimalPlaces;
                 style.DecimalSeparator = source.DecimalSeparator == '\0' ? '.' : source.DecimalSeparator;
                 style.Scale = source.ScaleFactor > 0 ? source.ScaleFactor : 1;
+                style.BaselineSpacing = source.DimensionLineIncrement > 0 ? source.DimensionLineIncrement : style.BaselineSpacing;
             }
 
             return style;

@@ -16,7 +16,11 @@ public sealed class SampleDrawingTests : IDisposable
 
         Assert.DoesNotContain(messages, m => m.Contains("sconosciuto") || m.Contains("non valid") || m.Contains("Serve") || m.Contains("errore"));
         var model = document.ModelSpace.ToList();
-        Assert.Equal(8, model.OfType<DimensionEntity>().Count());
+        Assert.Equal(13, model.OfType<DimensionEntity>().Count());
+        Assert.Single(model.OfType<LeaderEntity>());
+        Assert.Contains(model.OfType<TextEntity>(), t => t.Value == "Vite M8x20");
+        Assert.Contains(model.OfType<TextEntity>(), t => t.Value == "FLANGIA 120x80" && t.Style?.FontFamily == "Times New Roman");
+        Assert.Contains(model.OfType<PolylineEntity>(), p => p.Vertices.Count > 10 && p.Vertices.All(v => v.Bulge > 0));
         Assert.Equal(4, model.OfType<InsertEntity>().Count(i => i.Block.Name == "FORO"));
         Assert.Equal(2, model.OfType<HatchEntity>().Count());
         Assert.Equal("CENTER", document.FindLayer("ASSI")!.Linetype.Name);
@@ -37,6 +41,7 @@ public sealed class SampleDrawingTests : IDisposable
         var before = document.ModelSpace.GroupBy(e => (e.GetType(), e.Layer.Name)).ToDictionary(g => g.Key, g => g.Count());
         var after = reloaded.Document.ModelSpace.GroupBy(e => (e.GetType(), e.Layer.Name)).ToDictionary(g => g.Key, g => g.Count());
         Assert.Equal(before, after);
+        Assert.Equal(document.Groups.Count(g => document.Members(g).Any()), reloaded.Document.Groups.Count);
         Assert.Equal(document.Bounds.Max.X, reloaded.Document.Bounds.Max.X, 6);
     }
 }

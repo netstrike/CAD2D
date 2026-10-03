@@ -73,6 +73,13 @@ public sealed class Editor
         entity.Color = CurrentColor;
         entity.Linetype = CurrentLinetype;
         entity.LineWeight = CurrentLineWeight;
+        if (entity is TextEntity { Style: null } text)
+        {
+            // I testi nuovi prendono lo stile corrente e il suo fattore di larghezza.
+            text.Style = Document.CurrentTextStyle;
+            text.WidthFactor = Document.CurrentTextStyle.WidthFactor;
+        }
+
         return entity;
     }
 
@@ -176,6 +183,10 @@ public sealed class Editor
     public event EventHandler? StateChanged;
 
     public IEnumerable<string> CommandNames => _commands.Values.Select(c => c.Name).Distinct();
+
+    /// <summary>Nome del comando a cui corrisponde un nome o un alias (per esempio C → CERCHIO), o null.</summary>
+    public string? ResolveCommand(string nameOrAlias) =>
+        _commands.TryGetValue(nameOrAlias.Trim(), out var info) ? info.Name : null;
 
     /// <summary>Registra un comando con il suo nome e gli alias (per esempio LINEA, L, LINE).</summary>
     public void RegisterCommand(string name, Func<Editor, Task> run, params string[] aliases)
@@ -445,8 +456,17 @@ public sealed class Editor
         Ask(PromptKind.Number, prompt, null, null, keywords);
 
     /// <summary>Testo libero, spazi compresi. Invio a vuoto restituisce <see cref="PromptStatus.None"/>.</summary>
-    public Task<PromptResult> GetStringAsync(string prompt, string? initialText = null, Vector2? basePoint = null, Func<Vector2, IEnumerable<Entity>>? preview = null) =>
-        Ask(PromptKind.Text, prompt, basePoint, preview, [], initialText);
+    /// <remarks>I codici %%c, %%d e %%p diventano Ø, ° e ±, come negli altri CAD (la Ø non c'è sulla tastiera italiana).</remarks>
+    public async Task<PromptResult> GetStringAsync(string prompt, string? initialText = null, Vector2? basePoint = null, Func<Vector2, IEnumerable<Entity>>? preview = null)
+    {
+        var result = await Ask(PromptKind.Text, prompt, basePoint, preview, [], initialText);
+        return result.Text is { } text ? result with { Text = DecodeSymbols(text) } : result;
+    }
+
+    public static string DecodeSymbols(string text) => text
+        .Replace("%%c", "Ø", StringComparison.OrdinalIgnoreCase)
+        .Replace("%%d", "°", StringComparison.OrdinalIgnoreCase)
+        .Replace("%%p", "±", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Entità su cui operare: se c'è già una selezione si usa quella, altrimenti si selezionano con clic e finestre
@@ -768,6 +788,18 @@ public sealed class EditorSettings
     public double ChamferDistance1 { get; set; }
     public double ChamferDistance2 { get; set; }
     public double TextHeight { get; set; } = 2.5;
+
+    /// <summary>Origine delle quote a coordinata (QCOORDINATA).</summary>
+    public Vector2 OrdinateOrigin { get; set; }
+
+    /// <summary>Tabella: colonne, righe e dimensioni delle celle dell'ultima tabella.</summary>
+    public int TableColumns { get; set; } = 3;
+    public int TableRows { get; set; } = 4;
+    public double TableColumnWidth { get; set; } = 30;
+    public double TableRowHeight { get; set; } = 7.5;
+
+    /// <summary>Lunghezza degli archi delle nuvole di revisione.</summary>
+    public double CloudArcLength { get; set; } = 10;
 
     /// <summary>Ultimo blocco inserito, proposto da INSERISCI.</summary>
     public string? LastBlock { get; set; }

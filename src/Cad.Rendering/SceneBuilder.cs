@@ -106,6 +106,20 @@ public static class SceneBuilder
                 return;
             }
 
+            if (entity is ICompositeEntity composite)
+            {
+                if (context.Depth < MaxDepth)
+                {
+                    var inner = new Context(context.Transform, layer, color, linetype, context.Depth + 1, _weight);
+                    foreach (var part in composite.Explode())
+                    {
+                        Add(part, inner);
+                    }
+                }
+
+                return;
+            }
+
             EntityCount++;
             var m = context.Transform;
             var dash = IgnoreLinetypes || linetype.IsContinuous
@@ -322,7 +336,9 @@ public static class SceneBuilder
                         m.Transform(corners.Max),
                         m.Transform(new Vector2(corners.Min.X, corners.Max.Y)),
                         m.Transform(new Vector2(corners.Max.X, corners.Min.Y)),
-                    ])));
+                    ]),
+                    text.Style?.FontFamily ?? TextStyle.DefaultFamily,
+                    text.Style?.ObliqueAngle ?? 0));
             }
         }
     }

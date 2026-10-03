@@ -82,6 +82,16 @@ public class FormDialog : Window
 
     protected void Add(Control control) => _body.Children.Add(control);
 
+    /// <summary>Controllo e applicazione propri, eseguiti con OK insieme a quelli delle righe.</summary>
+    protected void OnAccept(Func<bool> validate, Action apply)
+    {
+        _validators.Add(validate);
+        _appliers.Add(apply);
+    }
+
+    /// <summary>Bordo rosso sulle caselle con un valore non valido.</summary>
+    protected static void MarkError(TextBox box, bool ok) => box.BorderBrush = ok ? null : ErrorBrush;
+
     /// <summary>Casella numerica (accetta punto o virgola) con controllo del valore.</summary>
     protected TextBox Number(string label, double value, Func<double, bool> isValid, Action<double> apply)
     {

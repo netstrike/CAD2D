@@ -11,6 +11,7 @@ public sealed class CadDocument
     private readonly Dictionary<string, BlockDefinition> _blocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Linetype> _linetypes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DimensionStyle> _dimensionStyles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TextStyle> _textStyles = new(StringComparer.OrdinalIgnoreCase);
 
     private int _savedDepth;
     private bool _savedStateLost;
@@ -25,6 +26,7 @@ public sealed class CadDocument
         }
 
         CurrentDimensionStyle = GetOrAddDimensionStyle(DimensionStyle.DefaultName);
+        CurrentTextStyle = GetOrAddTextStyle(TextStyle.DefaultName);
         History = new UndoHistory(this);
     }
 
@@ -112,6 +114,39 @@ public sealed class CadDocument
         }
 
         return style;
+    }
+
+    public IEnumerable<TextStyle> TextStyles => _textStyles.Values;
+
+    /// <summary>Stile dei testi nuovi.</summary>
+    public TextStyle CurrentTextStyle { get; set; }
+
+    public TextStyle? FindTextStyle(string name) => _textStyles.GetValueOrDefault(name);
+
+    public TextStyle GetOrAddTextStyle(string name)
+    {
+        if (!_textStyles.TryGetValue(name, out var style))
+        {
+            style = new TextStyle(name);
+            _textStyles.Add(name, style);
+        }
+
+        return style;
+    }
+
+    /// <summary>Rinomina uno stile di testo; false se il nome non è valido o è già usato. Standard non si rinomina.</summary>
+    public bool RenameTextStyle(TextStyle style, string name)
+    {
+        if (!IsValidName(name) || style.Name.Equals(TextStyle.DefaultName, StringComparison.OrdinalIgnoreCase) ||
+            (_textStyles.ContainsKey(name) && !name.Equals(style.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        _textStyles.Remove(style.Name);
+        style.Name = name;
+        _textStyles.Add(name, style);
+        return true;
     }
 
     public IEnumerable<Linetype> Linetypes => _linetypes.Values;

@@ -327,6 +327,9 @@ public sealed class TextEntity(Layer layer, Vector2 position, double height, str
     public TextHorizontalAlignment HorizontalAlignment { get; set; }
     public TextVerticalAlignment VerticalAlignment { get; set; }
 
+    /// <summary>Stile di testo (carattere e inclinazione); null = Standard.</summary>
+    public TextStyle? Style { get; set; }
+
     public IReadOnlyList<string> Lines => Value.Split('\n');
 
     public override IReadOnlyList<Vector2> Grips => [Position];
@@ -341,6 +344,7 @@ public sealed class TextEntity(Layer layer, Vector2 position, double height, str
             LineSpacing = LineSpacing,
             HorizontalAlignment = HorizontalAlignment,
             VerticalAlignment = VerticalAlignment,
+            Style = Style,
         };
     }
 

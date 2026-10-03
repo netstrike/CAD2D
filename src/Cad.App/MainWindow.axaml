@@ -81,6 +81,14 @@
         <MenuItem Header="_Testo su una riga" Click="OnMenuCommand" Tag="TESTO" />
         <MenuItem Header="Testo su _più righe" Click="OnMenuCommand" Tag="TESTOM" />
         <MenuItem Header="_Modifica testo" Click="OnMenuCommand" Tag="MODIFICATESTO" />
+        <Separator />
+        <MenuItem Header="_Stile di testo..." Click="OnMenuCommand" Tag="DLGSTILETESTO" />
+        <Separator />
+        <MenuItem Header="_Direttrice" Click="OnMenuCommand" Tag="DIRETTRICE" />
+        <MenuItem Header="Ta_bella" Click="OnMenuCommand" Tag="TABELLA" />
+        <MenuItem Header="_Cella di tabella" Click="OnMenuCommand" Tag="CELLA" />
+        <MenuItem Header="T_olleranza geometrica" Click="OnMenuCommand" Tag="TOLLERANZA" />
+        <MenuItem Header="_Nuvola di revisione" Click="OnMenuCommand" Tag="NUVOLA" />
       </MenuItem>
       <MenuItem Header="_Quota">
         <MenuItem Header="_Lineare" Click="OnMenuCommand" Tag="QLINEARE" />
@@ -88,6 +96,14 @@
         <MenuItem Header="_Raggio" Click="OnMenuCommand" Tag="QRAGGIO" />
         <MenuItem Header="_Diametro" Click="OnMenuCommand" Tag="QDIAMETRO" />
         <MenuItem Header="A_ngolare" Click="OnMenuCommand" Tag="QANGOLARE" />
+        <MenuItem Header="Lunghezza d'a_rco" Click="OnMenuCommand" Tag="QARCO" />
+        <MenuItem Header="_Coordinata" Click="OnMenuCommand" Tag="QCOORDINATA" />
+        <Separator />
+        <MenuItem Header="In _serie" Click="OnMenuCommand" Tag="QCONTINUA" />
+        <MenuItem Header="Da _base" Click="OnMenuCommand" Tag="QBASE" />
+        <Separator />
+        <MenuItem Header="Segno di _centro" Click="OnMenuCommand" Tag="SEGNOCENTRO" />
+        <MenuItem Header="As_se" Click="OnMenuCommand" Tag="ASSE" />
         <Separator />
         <MenuItem Header="_Stile di quota..." Click="OnMenuCommand" Tag="DLGSTILEQUOTA" />
       </MenuItem>

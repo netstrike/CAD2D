@@ -145,7 +145,7 @@ public partial class MainWindow : Window
                 GroupToggle.IsChecked = GroupToggle.IsChecked != true;
                 AppendHistory(GroupToggle.IsChecked == true ? "<Selezione dei gruppi attiva>" : "<Selezione dei gruppi disattivata>");
                 break;
-            case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "OPZIONI":
+            case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "DLGSTILETESTO" or "OPZIONI":
                 ShowDialogCommand(command);
                 return;
             case "TEMA":
@@ -264,6 +264,20 @@ public partial class MainWindow : Window
                     // Le quote già disegnate si aggiornano con lo stile.
                     editor.Document.MarkModified();
                     AppendHistory($"Stile di quota {editor.Document.CurrentDimensionStyle.Name} aggiornato.");
+                }
+
+                break;
+            }
+
+            case "DLGSTILETESTO":
+            {
+                var dialog = new TextStyleDialog(editor.Document);
+                await dialog.ShowDialog(this);
+                if (dialog.Accepted)
+                {
+                    // I testi con gli stili cambiati si ridisegnano.
+                    editor.Document.MarkModified();
+                    AppendHistory($"Stile di testo corrente: {editor.Document.CurrentTextStyle.Name}.");
                 }
 
                 break;

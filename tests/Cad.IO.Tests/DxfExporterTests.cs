@@ -251,6 +251,60 @@ public sealed class DxfDraftingRoundTripTests : IDisposable
     }
 
     [Fact]
+    public void Leaders_new_dimensions_and_text_styles_survive_save_and_reload()
+    {
+        var document = new CadDocument();
+        var layer = document.GetOrAddLayer("0");
+        var style = document.GetOrAddTextStyle("Titoli");
+        style.FontFamily = "Times New Roman";
+        style.Height = 5;
+        style.ObliqueAngle = 15 * Math.PI / 180;
+        document.CurrentTextStyle = style;
+        var dimensionStyle = document.CurrentDimensionStyle;
+        dimensionStyle.BaselineSpacing = 6;
+        var group = document.AddGroup()!;
+        group.Description = AnnotationGroups.Leader;
+        document.Edit("test", e =>
+        {
+            e.Add(new LeaderEntity(layer, [Vector2.Zero, new Vector2(10, 10), new Vector2(15, 10)], dimensionStyle) { Group = group });
+            e.Add(new TextEntity(layer, new Vector2(16, 10), 2.5, "Foro") { Style = style, Group = group });
+            e.Add(new DimensionEntity(layer, DimensionKind.Ordinate, dimensionStyle)
+            {
+                Vertex = new Vector2(5, 5), First = new Vector2(30, 20), Second = new Vector2(30, 40), Location = new Vector2(30, 40), OrdinateX = true,
+            });
+            e.Add(new DimensionEntity(layer, DimensionKind.ArcLength, dimensionStyle)
+            {
+                Vertex = Vector2.Zero, First = new Vector2(10, 0), Second = new Vector2(0, 10), Location = new Vector2(15, 15),
+            });
+        });
+
+        var path = Path.Combine(_folder, "annotazioni.dxf");
+        DxfExporter.Save(document, path);
+        // Un secondo salvataggio riscrive i gruppi senza nome senza conflitti di nomi.
+        document.Edit("test", e => e.Add(new CircleEntity(layer, Vector2.Zero, 1) { Group = document.AddGroup() }));
+        DxfExporter.Save(document, path);
+        var doc = DxfImporter.Load(path).Document;
+
+        var leader = Assert.Single(doc.ModelSpace.OfType<LeaderEntity>());
+        Assert.Equal(3, leader.Vertices.Count);
+        Assert.Equal(new Vector2(10, 10), leader.Vertices[1]);
+        var text = Assert.Single(doc.ModelSpace.OfType<TextEntity>());
+        Assert.Same(leader.Group, text.Group);
+        Assert.Equal("Titoli", text.Style!.Name);
+        Assert.Equal("Times New Roman", text.Style.FontFamily);
+        Assert.Equal(5, text.Style.Height, 9);
+        Assert.Equal(15 * Math.PI / 180, text.Style.ObliqueAngle, 6);
+        Assert.Equal("Titoli", doc.CurrentTextStyle.Name);
+        Assert.Equal(6, doc.CurrentDimensionStyle.BaselineSpacing, 9);
+
+        var ordinate = Assert.Single(doc.ModelSpace.OfType<DimensionEntity>(), d => d.Kind == DimensionKind.Ordinate);
+        Assert.True(ordinate.OrdinateX);
+        Assert.Equal(25, ordinate.Measurement, 9);
+        var arc = Assert.Single(doc.ModelSpace.OfType<DimensionEntity>(), d => d.Kind == DimensionKind.ArcLength);
+        Assert.Equal(5 * Math.PI, arc.Measurement, 9);
+    }
+
+    [Fact]
     public void Lineweights_of_layers_and_entities_survive_save_and_reload()
     {
         var document = new CadDocument();

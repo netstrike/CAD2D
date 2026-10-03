@@ -118,6 +118,14 @@ public static class ClipboardCommands
             dimension.GraphicsTransform = Matrix2D.Identity;
             dimension.Style = ImportDimensionStyle(source.Style, target);
         }
+        else if (copy is LeaderEntity leader)
+        {
+            leader.Style = ImportDimensionStyle(leader.Style, target);
+        }
+        else if (copy is TextEntity { Style: { } textStyle } text)
+        {
+            text.Style = ImportTextStyle(textStyle, target);
+        }
 
         return copy;
     }
@@ -161,6 +169,23 @@ public static class ClipboardCommands
         return target.FindLinetype(linetype.Name) ?? target.AddLinetype(linetype);
     }
 
+    /// <summary>Stile di testo con lo stesso nome nel disegno di destinazione; se manca si crea uguale.</summary>
+    private static TextStyle ImportTextStyle(TextStyle style, CadDocument target)
+    {
+        if (target.FindTextStyle(style.Name) is { } existing)
+        {
+            return existing;
+        }
+
+        var result = target.GetOrAddTextStyle(style.Name);
+        result.FontFamily = style.FontFamily;
+        result.FontFile = style.FontFile;
+        result.Height = style.Height;
+        result.WidthFactor = style.WidthFactor;
+        result.ObliqueAngle = style.ObliqueAngle;
+        return result;
+    }
+
     private static DimensionStyle ImportDimensionStyle(DimensionStyle style, CadDocument target)
     {
         var exists = target.DimensionStyles.Any(s => string.Equals(s.Name, style.Name, StringComparison.OrdinalIgnoreCase));
@@ -175,6 +200,7 @@ public static class ClipboardCommands
             result.Decimals = style.Decimals;
             result.DecimalSeparator = style.DecimalSeparator;
             result.Scale = style.Scale;
+            result.BaselineSpacing = style.BaselineSpacing;
         }
 
         return result;

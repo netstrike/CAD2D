@@ -103,6 +103,7 @@ public static class DxfExporter
         }
 
         SyncGroups(document, target);
+        target.Header.CurrentTextStyleName = document.CurrentTextStyle.Name;
         return target;
     }
 
@@ -119,6 +120,9 @@ public static class DxfExporter
             target.Groups.Remove(name);
         }
 
+        // ACadSharp chiama "*D0" tutti i gruppi senza nome e rifiuta il secondo: si creano con un nome provvisorio
+        // e poi si rinominano, così nel file restano senza nome.
+        var unnamed = 0;
         foreach (var group in document.Groups)
         {
             var members = document.Members(group).Select(e => e.SourceTag).OfType<AcadEntities.Entity>().ToList();
@@ -127,7 +131,18 @@ public static class DxfExporter
                 continue;
             }
 
-            var written = group.IsUnnamed ? target.Groups.CreateGroup(members) : target.Groups.CreateGroup(group.Name, members);
+            Acad.Objects.Group written;
+            if (group.IsUnnamed)
+            {
+                unnamed++;
+                written = target.Groups.CreateGroup($"CAD2D_UNNAMED_{unnamed}", members);
+                written.Name = $"*A{unnamed}";
+            }
+            else
+            {
+                written = target.Groups.CreateGroup(group.Name, members);
+            }
+
             written.Description = group.Description;
             written.Selectable = group.Selectable;
         }
@@ -435,6 +450,7 @@ public static class DxfExporter
                 InsertEntity insert => ConvertInsert(insert),
                 SolidEntity solid => ConvertSolid(solid),
                 DimensionEntity dimension => ConvertDimension(dimension),
+                LeaderEntity leader => ConvertLeader(leader),
                 HatchEntity hatch => ConvertHatch(hatch),
                 _ => null,
             };
@@ -515,6 +531,28 @@ public static class DxfExporter
                     };
                     break;
 
+                case DimensionKind.Ordinate:
+                    result = new AcadEntities.DimensionOrdinate
+                    {
+                        DefinitionPoint = ToXyz(dimension.Vertex),
+                        FeatureLocation = ToXyz(dimension.First),
+                        LeaderEndpoint = ToXyz(dimension.Second),
+                        IsOrdinateTypeX = dimension.OrdinateX,
+                    };
+                    break;
+
+                case DimensionKind.ArcLength:
+                    result = new AcadEntities.DimensionArc
+                    {
+                        DefinitionPoint = ToXyz(dimension.Location),
+                        Center = ToXyz(dimension.Vertex),
+                        FirstPoint = ToXyz(dimension.First),
+                        SecondPoint = ToXyz(dimension.Second),
+                        StartAngle = (dimension.First - dimension.Vertex).Angle,
+                        EndAngle = (dimension.Second - dimension.Vertex).Angle,
+                    };
+                    break;
+
                 default:
                     result = new AcadEntities.DimensionAngular3Pt
                     {
@@ -537,6 +575,43 @@ public static class DxfExporter
             return result;
         }
 
+        /// <summary>Direttrice senza annotazione associata: il testo è un'entità a parte, nello stesso gruppo.</summary>
+        private AcadEntities.Leader ConvertLeader(LeaderEntity leader)
+        {
+            var result = new AcadEntities.Leader
+            {
+                Style = GetDimensionStyle(leader.Style),
+                ArrowHeadEnabled = leader.HasArrow,
+                CreationType = AcadEntities.LeaderCreationType.CreatedWithoutAnnotation,
+            };
+            foreach (var vertex in leader.Vertices)
+            {
+                result.Vertices.Add(ToXyz(vertex));
+            }
+
+            return result;
+        }
+
+        private Acad.Tables.TextStyle GetTextStyle(TextStyle? style)
+        {
+            style ??= new TextStyle(TextStyle.DefaultName);
+            if (!target.TextStyles.TryGetValue(style.Name, out var acad))
+            {
+                acad = new Acad.Tables.TextStyle(style.Name);
+                target.TextStyles.Add(acad);
+            }
+
+            if (!string.Equals(acad.Filename, style.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                acad.Filename = style.FileName;
+            }
+
+            acad.Height = style.Height;
+            acad.Width = style.WidthFactor;
+            acad.ObliqueAngle = style.ObliqueAngle;
+            return acad;
+        }
+
         private Acad.Tables.DimensionStyle GetDimensionStyle(DimensionStyle style)
         {
             if (!target.DimensionStyles.TryGetValue(style.Name, out var acad))
@@ -553,6 +628,7 @@ public static class DxfExporter
             acad.DecimalPlaces = (short)style.Decimals;
             acad.DecimalSeparator = style.DecimalSeparator;
             acad.ScaleFactor = style.Scale;
+            acad.DimensionLineIncrement = style.BaselineSpacing;
             acad.TextVerticalAlignment = Acad.Tables.DimensionTextVerticalAlignment.Above;
             acad.TextInsideHorizontal = false;
             acad.TextOutsideHorizontal = false;
@@ -633,7 +709,24 @@ public static class DxfExporter
             return result;
         }
 
-        private static AcadEntities.Entity ConvertText(TextEntity text)
+        private AcadEntities.Entity ConvertText(TextEntity text)
+        {
+            var converted = ConvertTextCore(text);
+            switch (converted)
+            {
+                case AcadEntities.MText mtext:
+                    mtext.Style = GetTextStyle(text.Style);
+                    break;
+                case AcadEntities.TextEntity single:
+                    single.Style = GetTextStyle(text.Style);
+                    single.ObliqueAngle = text.Style?.ObliqueAngle ?? 0;
+                    break;
+            }
+
+            return converted;
+        }
+
+        private static AcadEntities.Entity ConvertTextCore(TextEntity text)
         {
             if (text.Lines.Count > 1)
             {

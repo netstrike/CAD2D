@@ -34,6 +34,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
 
     private static readonly SKColor TrackingColor = new(0x60, 0xD0, 0x60);
     private static readonly SKTypeface TextTypeface = SKTypeface.FromFamilyName("Arial") ?? SKTypeface.Default;
+    private static readonly Dictionary<string, SKTypeface> Typefaces = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SKTypeface LabelTypeface = SKTypeface.FromFamilyName("Segoe UI") ?? TextTypeface;
     private static readonly float CapHeightRatio = MeasureCapHeightRatio();
 
@@ -140,6 +141,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
 
             var p = worldToScreen.Transform(text.Position);
             paint.Color = SceneGeometry.ToSkColor(text.Color, Light);
+            paint.Typeface = Typeface(text.FontFamily);
             paint.TextSize = (float)(pixels / CapHeightRatio);
             paint.TextAlign = text.Alignment switch
             {
@@ -153,8 +155,29 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
             // Lo schermo ha la Y verso il basso: la rotazione antioraria del disegno diventa negativa.
             canvas.RotateRadians((float)-text.Rotation);
             canvas.Scale((float)text.WidthFactor, 1);
+            if (text.Oblique != 0)
+            {
+                // La Y dello schermo va verso il basso: per inclinare a destra la parte alta si sposta verso X positive.
+                canvas.Skew((float)-Math.Tan(text.Oblique), 0);
+            }
+
             canvas.DrawText(text.Text, 0, 0, paint);
             canvas.Restore();
+        }
+    }
+
+    /// <summary>Carattere di una famiglia, cercato una volta sola; Arial se la famiglia non è installata.</summary>
+    private static SKTypeface Typeface(string family)
+    {
+        lock (Typefaces)
+        {
+            if (!Typefaces.TryGetValue(family, out var typeface))
+            {
+                typeface = SKFontManager.Default.MatchFamily(family) ?? TextTypeface;
+                Typefaces[family] = typeface;
+            }
+
+            return typeface;
         }
     }
 

@@ -135,6 +135,12 @@ public static class AnnotationCommands
 
     private static async Task<double?> AskHeight(Editor ed, Vector2 basePoint)
     {
+        // Uno stile con altezza fissa non la chiede.
+        if (ed.Document.CurrentTextStyle.Height > Tolerance.Default)
+        {
+            return ed.Document.CurrentTextStyle.Height;
+        }
+
         var settings = ed.Settings;
         var height = await ed.GetDistanceAsync($"Altezza <{Editor.Format(settings.TextHeight)}>:", basePoint);
         switch (height.Status)

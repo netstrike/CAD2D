@@ -14,6 +14,12 @@ public enum DimensionKind
     Radius,
     Diameter,
     Angular,
+
+    /// <summary>Coordinata X o Y di un punto rispetto all'origine, con la direttrice e il valore in fondo.</summary>
+    Ordinate,
+
+    /// <summary>Lunghezza di un arco, con l'arco di quota concentrico.</summary>
+    ArcLength,
 }
 
 /// <summary>Stile di quota: dimensioni di testo, frecce e linee, formato dei numeri. Valori iniziali come ISO-25.</summary>
@@ -36,6 +42,9 @@ public sealed class DimensionStyle(string name)
 
     public int Decimals { get; set; } = 2;
     public char DecimalSeparator { get; set; } = ',';
+
+    /// <summary>Distanza tra le linee di quota delle quote da linea di base (DIMDLI).</summary>
+    public double BaselineSpacing { get; set; } = 3.75;
 
     /// <summary>Fattore globale che moltiplica tutte le grandezze (DIMSCALE): utile per disegni in scala.</summary>
     public double Scale { get; set; } = 1;
@@ -63,16 +72,25 @@ public sealed class DimensionStyle(string name)
 /// </summary>
 public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionStyle style) : Entity(layer)
 {
+    /// <summary>Simbolo della lunghezza d'arco davanti alla misura.</summary>
+    public const string ArcSymbol = "⌒";
+
     public DimensionKind Kind { get; } = kind;
     public DimensionStyle Style { get; set; } = style;
 
-    /// <summary>Lineare e allineata: origine della prima linea di estensione. Raggio e diametro: centro. Angolare: punto sul primo lato.</summary>
+    /// <summary>
+    /// Lineare e allineata: origine della prima linea di estensione. Raggio e diametro: centro. Angolare: punto sul primo lato.
+    /// Coordinata: punto misurato. Lunghezza d'arco: inizio dell'arco.
+    /// </summary>
     public Vector2 First { get; set; }
 
-    /// <summary>Lineare e allineata: origine della seconda linea di estensione. Raggio e diametro: punto sulla circonferenza. Angolare: punto sul secondo lato.</summary>
+    /// <summary>
+    /// Lineare e allineata: origine della seconda linea di estensione. Raggio e diametro: punto sulla circonferenza.
+    /// Angolare: punto sul secondo lato. Coordinata: fine della direttrice. Lunghezza d'arco: fine dell'arco (in senso antiorario).
+    /// </summary>
     public Vector2 Second { get; set; }
 
-    /// <summary>Solo angolare: vertice dell'angolo.</summary>
+    /// <summary>Angolare: vertice dell'angolo. Lunghezza d'arco: centro dell'arco. Coordinata: origine delle coordinate.</summary>
     public Vector2 Vertex { get; set; }
 
     /// <summary>Dove passa la linea di quota (o l'arco, per l'angolare); per raggio e diametro, dove sta il testo.</summary>
@@ -80,6 +98,9 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
 
     /// <summary>Solo lineare: direzione della misura (0 = orizzontale, π/2 = verticale).</summary>
     public double Rotation { get; set; }
+
+    /// <summary>Solo coordinata: true misura la X (direttrice verticale), false la Y.</summary>
+    public bool OrdinateX { get; set; }
 
     /// <summary>Testo scritto al posto della misura; "&lt;&gt;" viene sostituito dalla misura. Null = solo la misura.</summary>
     public string? TextOverride { get; set; }
@@ -95,6 +116,8 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
         DimensionKind.Aligned => Vector2.Distance(First, Second),
         DimensionKind.Radius => Vector2.Distance(First, Second),
         DimensionKind.Diameter => 2 * Vector2.Distance(First, Second),
+        DimensionKind.Ordinate => Math.Abs(OrdinateX ? First.X - Vertex.X : First.Y - Vertex.Y),
+        DimensionKind.ArcLength => MeasuredArc().Radius * MeasuredArc().Sweep,
         _ => AngularArc().Sweep * 180 / Math.PI,
     };
 
@@ -107,13 +130,19 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
                 DimensionKind.Angular => Style.FormatAngle(Measurement),
                 DimensionKind.Radius => "R" + Style.FormatLength(Measurement),
                 DimensionKind.Diameter => "Ø" + Style.FormatLength(Measurement),
+                DimensionKind.ArcLength => ArcSymbol + Style.FormatLength(Measurement),
                 _ => Style.FormatLength(Measurement),
             };
             return TextOverride is null ? value : TextOverride.Replace("<>", value, StringComparison.Ordinal);
         }
     }
 
-    public override IReadOnlyList<Vector2> Grips => Kind == DimensionKind.Angular ? [Vertex, First, Second, Location] : [First, Second, Location];
+    public override IReadOnlyList<Vector2> Grips => Kind switch
+    {
+        DimensionKind.Angular or DimensionKind.ArcLength => [Vertex, First, Second, Location],
+        DimensionKind.Ordinate => [First, Second],
+        _ => [First, Second, Location],
+    };
 
     public override BoundingBox Bounds => Graphics is { } graphics
         ? TransformedBox(graphics.Bounds, GraphicsTransform)
@@ -135,8 +164,7 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
     protected override Entity MoveGripCore(int index, Vector2 position)
     {
         var result = CopyGeometry(Matrix2D.Identity);
-        var points = Kind == DimensionKind.Angular ? 4 : 3;
-        var slot = index + (points == 3 ? 1 : 0);
+        var slot = index + (Kind is DimensionKind.Angular or DimensionKind.ArcLength ? 0 : 1);
         switch (slot)
         {
             case 0:
@@ -151,6 +179,12 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
             default:
                 result.Location = position;
                 break;
+        }
+
+        // Coordinata: la fine della direttrice è anche la posizione del testo.
+        if (Kind == DimensionKind.Ordinate && slot == 2)
+        {
+            result.Location = position;
         }
 
         // Raggio e diametro: il punto sulla circonferenza segue la posizione del testo.
@@ -174,6 +208,7 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
         Vertex = m.Transform(Vertex),
         Location = m.Transform(Location),
         Rotation = TransformAngle(m, Rotation),
+        OrdinateX = OrdinateX,
         TextOverride = TextOverride,
     };
 
@@ -197,6 +232,12 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
                 break;
             case DimensionKind.Diameter:
                 ExplodeDiameter(parts);
+                break;
+            case DimensionKind.Ordinate:
+                ExplodeOrdinate(parts);
+                break;
+            case DimensionKind.ArcLength:
+                ExplodeArc(parts, DimensionArc(MeasuredArc()), radial: true);
                 break;
             default:
                 ExplodeAngular(parts);
@@ -304,9 +345,11 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
         parts.Add(AlignedText(center, direction));
     }
 
-    private void ExplodeAngular(List<Entity> parts)
+    private void ExplodeAngular(List<Entity> parts) => ExplodeArc(parts, AngularArc(), radial: false);
+
+    /// <summary>Arco di quota con frecce e testo; le linee di estensione vanno dai punti indicati fino all'arco.</summary>
+    private void ExplodeArc(List<Entity> parts, Arc2D arc, bool radial)
     {
-        var arc = AngularArc();
         var radius = arc.Radius;
         if (radius <= Tolerance.Default)
         {
@@ -318,7 +361,11 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
         {
             var reach = Vector2.Distance(Vertex, point);
             var ray = Vector2.FromPolar(1, angle);
-            if (radius > reach + Size(Style.ExtensionOffset))
+            if (radial)
+            {
+                AddExtensionLine(parts, point, Vertex + ray * radius);
+            }
+            else if (radius > reach + Size(Style.ExtensionOffset))
             {
                 parts.Add(new LineEntity(Layer, Vertex + ray * (reach + Size(Style.ExtensionOffset)), Vertex + ray * (radius + Size(Style.ExtensionExtend))));
             }
@@ -331,7 +378,61 @@ public sealed class DimensionEntity(Layer layer, DimensionKind kind, DimensionSt
         parts.Add(Arrow(arc.EndPoint, endTangent));
 
         var middle = arc.StartAngle + arc.Sweep / 2;
-        parts.Add(AlignedText(arc.Midpoint, Vector2.FromPolar(1, middle).Perpendicular()));
+        var text = AlignedText(arc.Midpoint, Vector2.FromPolar(1, middle).Perpendicular());
+        parts.Add(text);
+        if (Kind == DimensionKind.ArcLength)
+        {
+            // Il simbolo ⌒ manca in quasi tutti i caratteri: si disegna come un piccolo arco sopra il testo.
+            text.Value = text.Value.Replace(ArcSymbol, string.Empty, StringComparison.Ordinal);
+            var h = text.Height;
+            var up = Vector2.FromPolar(1, text.Rotation).Perpendicular();
+            var center = text.Position + up * (0.9 * h);
+            parts.Add(new ArcEntity(Layer, center, 0.7 * h, text.Rotation + Math.PI / 6, text.Rotation + 5 * Math.PI / 6));
+        }
+    }
+
+    /// <summary>Arco misurato dalla quota di lunghezza d'arco: dal primo al secondo punto in senso antiorario.</summary>
+    private Arc2D MeasuredArc() =>
+        new(Vertex, Vector2.Distance(Vertex, First), (First - Vertex).Angle, (Second - Vertex).Angle);
+
+    /// <summary>Lo stesso arco portato alla distanza di <see cref="Location"/> dal centro.</summary>
+    private Arc2D DimensionArc(Arc2D measured) =>
+        new(Vertex, Vector2.Distance(Vertex, Location), measured.StartAngle, measured.EndAngle);
+
+    /// <summary>
+    /// Quota a coordinata: direttrice dal punto (con un gradino se la fine non è allineata) e valore in fondo,
+    /// nella direzione della direttrice.
+    /// </summary>
+    private void ExplodeOrdinate(List<Entity> parts)
+    {
+        var axis = OrdinateX ? Vector2.UnitY : Vector2.UnitX;
+        var delta = Second - First;
+        var along = Vector2.Dot(delta, axis);
+        var direction = along < 0 ? -axis : axis;
+        var length = Math.Abs(along);
+        var cross = delta - axis * along;
+        var start = First + direction * Math.Min(Size(Style.ExtensionOffset), length);
+        if (cross.Length <= Tolerance.Default)
+        {
+            parts.Add(new LineEntity(Layer, start, Second));
+        }
+        else
+        {
+            var a = First + direction * (length / 3);
+            var b = First + cross + direction * (2 * length / 3);
+            parts.Add(new LineEntity(Layer, start, a));
+            parts.Add(new LineEntity(Layer, a, b));
+            parts.Add(new LineEntity(Layer, b, Second));
+        }
+
+        var angle = direction.Angle;
+        var flipped = angle > Math.PI / 2 + 1e-9 || angle <= -Math.PI / 2 + 1e-9;
+        parts.Add(new TextEntity(Layer, Second + direction * Size(Style.TextGap), Size(Style.TextHeight), Text)
+        {
+            Rotation = Arc2D.NormalizeAngle(flipped ? angle + Math.PI : angle),
+            HorizontalAlignment = flipped ? TextHorizontalAlignment.Right : TextHorizontalAlignment.Left,
+            VerticalAlignment = TextVerticalAlignment.Middle,
+        });
     }
 
     /// <summary>Arco della quota angolare: tra i due lati, dalla parte in cui sta <see cref="Location"/>.</summary>

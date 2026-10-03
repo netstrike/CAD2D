@@ -199,3 +199,195 @@ public sealed class OptionsDialog : FormDialog
         (SnapModes.Tangent, "Tangente"), (SnapModes.Node, "Nodo"), (SnapModes.Nearest, "Vicino"),
     ];
 }
+
+/// <summary>
+/// Stili di testo: si sceglie lo stile (o se ne crea uno), si cambiano carattere, altezza fissa, larghezza e
+/// inclinazione con l'anteprima, e con OK lo stile scelto diventa quello corrente.
+/// </summary>
+public sealed class TextStyleDialog : FormDialog
+{
+    private sealed class Draft(TextStyle style)
+    {
+        public TextStyle Style { get; } = style;
+        public string Family { get; set; } = style.FontFamily;
+        public string Height { get; set; } = Format(style.Height);
+        public string Width { get; set; } = Format(style.WidthFactor);
+        public string Oblique { get; set; } = Format(style.ObliqueAngle * 180 / Math.PI);
+    }
+
+    private readonly CadDocument _document;
+    private readonly List<Draft> _drafts;
+    private readonly ComboBox _styles = new() { HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 26 };
+    private readonly ComboBox _family = new() { HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 26, MaxDropDownHeight = 320 };
+    private readonly TextBox _height = new() { MinHeight = 26 };
+    private readonly TextBox _width = new() { MinHeight = 26 };
+    private readonly TextBox _oblique = new() { MinHeight = 26 };
+    private readonly TextBlock _preview = new() { Text = "AaBbCc 0123 Ø±°", FontSize = 26, Margin = new Thickness(8, 4) };
+    private Draft? _current;
+    private bool _loading;
+
+    public TextStyleDialog(CadDocument document) : base("Stile di testo", 480)
+    {
+        _document = document;
+        _drafts = [.. document.TextStyles.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(s => new Draft(s))];
+
+        Section("Stile");
+        var newName = new TextBox { Watermark = "Nome del nuovo stile", MinHeight = 26 };
+        var create = new Button { Content = "Nuovo", Margin = new Thickness(6, 0, 0, 0) };
+        create.Click += (_, _) =>
+        {
+            var name = (newName.Text ?? string.Empty).Trim();
+            var ok = CadDocument.IsValidName(name) && _drafts.All(d => !d.Style.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            MarkError(newName, ok);
+            if (!ok)
+            {
+                return;
+            }
+
+            // Lo stile nuovo parte dai valori di quello mostrato; si crea davvero solo con OK.
+            var draft = new Draft(new TextStyle(name))
+            {
+                Family = _family.SelectedItem as string ?? TextStyle.DefaultFamily,
+                Height = _height.Text ?? "0",
+                Width = _width.Text ?? "1",
+                Oblique = _oblique.Text ?? "0",
+            };
+            _drafts.Add(draft);
+            RefreshStyles(draft);
+            newName.Text = string.Empty;
+        };
+        Row("Stile corrente", _styles);
+        var createRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        createRow.Children.Add(newName);
+        Grid.SetColumn(create, 1);
+        createRow.Children.Add(create);
+        Row("Crea uno stile", createRow);
+
+        Section("Carattere");
+        var families = FontManager.Current.SystemFonts.Select(f => f.Name).Distinct().Order(StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var draft in _drafts.Where(d => !families.Contains(d.Family, StringComparer.OrdinalIgnoreCase)))
+        {
+            families.Insert(0, draft.Family);
+        }
+
+        _family.ItemsSource = families;
+        Row("Famiglia", _family);
+        Row("Altezza fissa (0 = libera)", _height);
+        Row("Fattore di larghezza", _width);
+        Row("Inclinazione (gradi)", _oblique);
+
+        Section("Anteprima");
+        Add(new Border { Child = _preview, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), ClipToBounds = true, Height = 56 });
+
+        _styles.SelectionChanged += (_, _) => Load(_drafts.ElementAtOrDefault(_styles.SelectedIndex));
+        _family.SelectionChanged += (_, _) => Store();
+        _height.TextChanged += (_, _) => Store();
+        _width.TextChanged += (_, _) => Store();
+        _oblique.TextChanged += (_, _) => Store();
+        RefreshStyles(_drafts.FirstOrDefault(d => d.Style == document.CurrentTextStyle) ?? _drafts[0]);
+
+        OnAccept(Validate, Save);
+    }
+
+    private void RefreshStyles(Draft selected)
+    {
+        _styles.ItemsSource = _drafts.Select(d => d.Style.Name).ToList();
+        _styles.SelectedIndex = _drafts.IndexOf(selected);
+    }
+
+    private void Load(Draft? draft)
+    {
+        if (draft is null)
+        {
+            return;
+        }
+
+        _loading = true;
+        _current = draft;
+        _family.SelectedItem = (_family.ItemsSource as List<string>)?.FirstOrDefault(f => f.Equals(draft.Family, StringComparison.OrdinalIgnoreCase)) ?? draft.Family;
+        _height.Text = draft.Height;
+        _width.Text = draft.Width;
+        _oblique.Text = draft.Oblique;
+        _loading = false;
+        UpdatePreview();
+    }
+
+    private void Store()
+    {
+        if (_loading || _current is null)
+        {
+            return;
+        }
+
+        _current.Family = _family.SelectedItem as string ?? _current.Family;
+        _current.Height = _height.Text ?? string.Empty;
+        _current.Width = _width.Text ?? string.Empty;
+        _current.Oblique = _oblique.Text ?? string.Empty;
+        UpdatePreview();
+    }
+
+    private void UpdatePreview()
+    {
+        if (_current is null)
+        {
+            return;
+        }
+
+        _preview.FontFamily = new FontFamily(_current.Family);
+        var width = TryParse(_current.Width, out var w) && w > 0 ? w : 1;
+        var oblique = TryParse(_current.Oblique, out var o) && Math.Abs(o) <= 85 ? o : 0;
+        _preview.RenderTransformOrigin = new RelativePoint(0, 0.5, RelativeUnit.Relative);
+        _preview.RenderTransform = new MatrixTransform(new Matrix(width, 0, -Math.Tan(oblique * Math.PI / 180), 1, 0, 0));
+    }
+
+    /// <summary>Tutti gli stili devono avere valori validi; il primo sbagliato viene mostrato.</summary>
+    private bool Validate()
+    {
+        foreach (var draft in _drafts)
+        {
+            var heightOk = TryParse(draft.Height, out var h) && h >= 0;
+            var widthOk = TryParse(draft.Width, out var w) && w > 0;
+            var obliqueOk = TryParse(draft.Oblique, out var o) && Math.Abs(o) <= 85;
+            if (!(heightOk && widthOk && obliqueOk))
+            {
+                RefreshStyles(draft);
+                MarkError(_height, heightOk);
+                MarkError(_width, widthOk);
+                MarkError(_oblique, obliqueOk);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void Save()
+    {
+        foreach (var draft in _drafts)
+        {
+            var style = _document.FindTextStyle(draft.Style.Name) ?? _document.GetOrAddTextStyle(draft.Style.Name);
+            if (!style.FontFamily.Equals(draft.Family, StringComparison.OrdinalIgnoreCase))
+            {
+                style.FontFamily = draft.Family;
+                style.FontFile = null;
+            }
+
+            TryParse(draft.Height, out var height);
+            TryParse(draft.Width, out var width);
+            TryParse(draft.Oblique, out var oblique);
+            style.Height = height;
+            style.WidthFactor = width;
+            style.ObliqueAngle = oblique * Math.PI / 180;
+        }
+
+        if (_drafts.ElementAtOrDefault(_styles.SelectedIndex) is { } selected)
+        {
+            _document.CurrentTextStyle = _document.FindTextStyle(selected.Style.Name)!;
+        }
+    }
+
+    private static string Format(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    private static bool TryParse(string? text, out double value) =>
+        double.TryParse((text ?? string.Empty).Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
+}

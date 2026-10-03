@@ -60,7 +60,7 @@ public static class PropertySheet
         var type = entities[0].GetType();
         if (entities.All(e => e.GetType() == type))
         {
-            definitions.AddRange(SpecificDefinitions(entities[0]));
+            definitions.AddRange(SpecificDefinitions(entities[0], document));
         }
 
         return definitions.Select(d =>
@@ -90,6 +90,7 @@ public static class PropertySheet
         EllipseEntity => "Ellisse",
         TextEntity => "Testo",
         DimensionEntity => "Quota",
+        LeaderEntity => "Direttrice",
         InsertEntity => "Blocco",
         HatchEntity => "Tratteggio",
         SolidEntity => "Solido",
@@ -219,14 +220,15 @@ public static class PropertySheet
 
     // ---------- Proprietà per tipo ----------
 
-    private static IEnumerable<PropertyDefinition> SpecificDefinitions(Entity sample) => sample switch
+    private static IEnumerable<PropertyDefinition> SpecificDefinitions(Entity sample, CadDocument document) => sample switch
     {
         LineEntity => LineDefinitions(),
         CircleEntity => CircleDefinitions(),
         ArcEntity => ArcDefinitions(),
         PolylineEntity => PolylineDefinitions(),
-        TextEntity => TextDefinitions(),
+        TextEntity => TextDefinitions(document),
         DimensionEntity => DimensionDefinitions(),
+        LeaderEntity => LeaderDefinitions(),
         InsertEntity => InsertDefinitions(),
         HatchEntity => HatchDefinitions(),
         _ => [],
@@ -315,7 +317,7 @@ public static class PropertySheet
         yield return new(Geometry, "Area", PropertyKind.ReadOnly, e => ((PolylineEntity)e).IsClosed ? Format(PolylineArea(((PolylineEntity)e).Vertices)) : "-");
     }
 
-    private static IEnumerable<PropertyDefinition> TextDefinitions()
+    private static IEnumerable<PropertyDefinition> TextDefinitions(CadDocument document)
     {
         yield return new(Content, "Contenuto", PropertyKind.Text, e => ((TextEntity)e).Value.Replace("\n", "\\P", StringComparison.Ordinal),
             (e, v) => v.Length == 0 ? null : Detached<TextEntity>(t => t.Value = v.Replace("\\P", "\n", StringComparison.Ordinal))(e, v));
@@ -324,6 +326,9 @@ public static class PropertySheet
             Number<TextEntity>((t, v) => t.Transformed(Matrix2D.Scaling(v / t.Height, t.Position)), v => v > Tolerance.Default));
         yield return new(Content, "Rotazione", PropertyKind.Number, e => FormatAngle(((TextEntity)e).Rotation),
             Number<TextEntity>((t, v) => t.Transformed(Matrix2D.Rotation(v * Math.PI / 180 - t.Rotation, t.Position))));
+        yield return new(Content, "Stile", PropertyKind.Choice, e => ((TextEntity)e).Style?.Name ?? TextStyle.DefaultName,
+            (e, v) => document.FindTextStyle(v) is { } style ? Detached<TextEntity>(t => t.Style = style)(e, v) : null,
+            d => [.. d.TextStyles.Select(s => s.Name).Order(StringComparer.OrdinalIgnoreCase)]);
         yield return new(Content, "Fattore di larghezza", PropertyKind.Number, e => Format(((TextEntity)e).WidthFactor),
             Number<TextEntity>((t, v) => Detached<TextEntity>(c => c.WidthFactor = v)(t, ""), v => v > Tolerance.Default));
         foreach (var d in Point<TextEntity>("Posizione", t => t.Position, (t, p) => MoveTo(t, t.Position, p)))
@@ -341,6 +346,8 @@ public static class PropertySheet
             DimensionKind.Radius => "Raggio",
             DimensionKind.Diameter => "Diametro",
             DimensionKind.Angular => "Angolare",
+            DimensionKind.Ordinate => ((DimensionEntity)e).OrdinateX ? "Coordinata X" : "Coordinata Y",
+            DimensionKind.ArcLength => "Lunghezza d'arco",
             var k => k.ToString(),
         });
         yield return new(Geometry, "Misura", PropertyKind.ReadOnly, e => ((DimensionEntity)e).Kind == DimensionKind.Angular
@@ -356,6 +363,15 @@ public static class PropertySheet
                 return copy;
             });
         yield return new(Geometry, "Stile", PropertyKind.ReadOnly, e => ((DimensionEntity)e).Style.Name);
+    }
+
+    private static IEnumerable<PropertyDefinition> LeaderDefinitions()
+    {
+        yield return new(Geometry, "Vertici", PropertyKind.ReadOnly, e => ((LeaderEntity)e).Vertices.Count.ToString(CultureInfo.InvariantCulture));
+        yield return new(Geometry, "Freccia", PropertyKind.Choice, e => ((LeaderEntity)e).HasArrow ? Yes : No,
+            (e, v) => v == Yes || v == No ? Detached<LeaderEntity>(c => c.HasArrow = v == Yes)(e, v) : null,
+            _ => [Yes, No]);
+        yield return new(Geometry, "Stile di quota", PropertyKind.ReadOnly, e => ((LeaderEntity)e).Style.Name);
     }
 
     private static IEnumerable<PropertyDefinition> InsertDefinitions()

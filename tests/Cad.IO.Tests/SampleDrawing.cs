@@ -105,11 +105,23 @@ public static class SampleDrawing
         Pick(30 + 8 - 8 * Math.Sqrt(0.5), 60 + 8 - 8 * Math.Sqrt(0.5));
         T("20,50");
 
+        // Quote in serie sulla vista dall'alto.
+        T("DLI", "30,173", "49,173", "40,185");
+        T("QCONTINUA", "70,173", "110,173", "131,173", "150,173", "");
+
+        // Annotazioni: direttrice sui fori, tolleranza di perpendicolarità, distinta, nuvola di revisione.
+        T("DIRETTRICE", $"{45 - 4 * Math.Sqrt(0.5)},{125 + 4 * Math.Sqrt(0.5)}", "24,146", "", "4 fori Ø8", "passanti", "");
+        T("TOLLERANZA", "Perpendicolarità", "0,05", "A", "165,190");
+        T("TABELLA", "Colonne", "2", "Righe", "3", "Larghezza", "40", "Altezza", "7", "100,44",
+            "Pos.", "Descrizione", "1", "Flangia S235", "2", "Vite M8x20");
+        T("NUVOLA", "Arco", "5", "161,184", "224,196");
+
         // Testi.
         T("LA", "Corrente", "TESTI", "");
         T("DT", "Centro", "207.5,46", "3.5", "0", "SEZIONE A-A", "");
         T("DT", "30,30", "3.5", "0", "4 fori Ø8 passanti", "Tolleranze generali ISO 2768-m", "");
         T("LA", "Corrente", "CARTIGLIO", "");
+        T("STILETESTO", "Nuovo", "Cartiglio", "Carattere", "Times New Roman", "");
         T("DT", "192,32", "6", "0", "FLANGIA 120x80", "");
         T("DT", "192,15", "3", "0", "Scala 1:1", "");
         T("DT", "242,15", "3", "0", "Materiale S235", "");

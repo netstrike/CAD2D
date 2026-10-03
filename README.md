@@ -30,6 +30,10 @@ dotnet run --project tools/Cad.DxfCheck -- C:\disegni   # prova tutti i DXF di u
 
 ## Stato
 
+Fase 3.6 (annotazioni e gruppi): gruppi di oggetti che si selezionano insieme, direttrici con testo, quote in serie,
+da linea di base, a coordinata e di lunghezza d'arco, segni di centro e assi, stili di testo, tabelle, tolleranze
+geometriche e nuvole di revisione, tutti salvati nel DXF. Scheda Annota della barra multifunzione riorganizzata.
+
 Fase 3.5 (interfaccia): barra multifunzione, palette Proprietà e Layer, inserimento rapido vicino al cursore,
 tracciamento polare ed ETrack, gestore layer con spessori di linea, finestre per tratteggio, stile di quota e opzioni,
 tema chiaro. Ogni comando si raggiunge da barra o menu, senza scriverne il nome.
@@ -76,6 +80,28 @@ Fase 3 (disegno tecnico): si fa una tavola completa, con quote, tratteggi, blocc
 | QRAGGIO, QDIAMETRO | QR/DRA, QD/DDI | cerchi, archi e raccordi di polilinea |
 | QANGOLARE | QAN, DAN | due linee (anche lati di polilinea) o un arco |
 | STILEQUOTA | DST | altezza testo, frecce, decimali, scala globale (stile ISO-25, virgola decimale) |
+| QCONTINUA, QBASE | QC/DCO, QB/DBA | quote in serie o dalla stessa base, partendo dall'ultima quota (opzione Seleziona) |
+| QCOORDINATA | QO, DOR | X o Y di un punto secondo la direzione della direttrice; opzioni X, Y, Origine, Testo |
+| QARCO | QLA, DAR | lunghezza di un arco o di un tratto curvo di polilinea |
+| STILETESTO | ST, STYLE | stili di testo: carattere, altezza fissa, larghezza, inclinazione (anche dalla finestra Stile) |
+
+Nei testi `%%c`, `%%d` e `%%p` diventano Ø, ° e ±.
+
+### Annotazioni e gruppi
+
+| Comando | Alias | |
+| --- | --- | --- |
+| DIRETTRICE | LE, LEADER | punta della freccia, punti intermedi, Invio, poi il testo su una o più righe |
+| SEGNOCENTRO, ASSE | CM, CL | assi di un cerchio o arco; asse tra due linee |
+| TABELLA | TB, TABLE | colonne, righe e dimensioni delle celle come opzioni, poi i testi riga per riga |
+| CELLA | TABLEDIT | clic dentro una cella per scriverne o cambiarne il testo |
+| TOLLERANZA | TOL | caratteristica (Posizione, Planarità...), valore, riferimenti, posizione |
+| NUVOLA | NV, REVCLOUD | rettangolo, Poligono o Oggetto (cerchio o polilinea chiusa); opzione Arco |
+| GRUPPO | G, GROUP | crea un gruppo dalla selezione; opzioni Aggiungi, Togli, Rinomina, Elenco |
+| SEPARA | SG, UNGROUP | scioglie i gruppi degli oggetti scelti |
+
+Direttrici con testo, tabelle, tolleranze e segni di centro formano un gruppo: un clic su una parte seleziona tutto.
+L'interruttore GRUPPI nella barra di stato (Ctrl+Maiusc+A) permette di selezionare le singole parti.
 
 ### Proprietà e layer
 

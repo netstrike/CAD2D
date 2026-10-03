@@ -265,6 +265,14 @@ public partial class MainWindow
             .ThenBy(n => n, StringComparer.Ordinal)
             .Take(12)
             .ToList();
+
+        // Un alias scritto per intero (C, L, CO...) propone per primo il suo comando: Invio esegue quello.
+        if (editor.ResolveCommand(text) is { } exact)
+        {
+            matches.Remove(exact);
+            matches.Insert(0, exact);
+        }
+
         if (matches.Count == 0 || (matches.Count == 1 && string.Equals(matches[0], text, StringComparison.OrdinalIgnoreCase)))
         {
             CompletionPopup.IsOpen = false;
@@ -276,7 +284,7 @@ public partial class MainWindow
         CompletionPopup.IsOpen = true;
     }
 
-    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER", "GESTORELAYER", "OPZIONI", "SELEZIONATUTTO", "SELGRUPPI", "TEMA", "DLGTRATTEGGIO", "DLGSTILEQUOTA"];
+    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER", "GESTORELAYER", "OPZIONI", "SELEZIONATUTTO", "SELGRUPPI", "TEMA", "DLGTRATTEGGIO", "DLGSTILEQUOTA", "DLGSTILETESTO"];
 
     private void InitializeCompletion()
     {

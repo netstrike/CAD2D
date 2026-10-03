@@ -22,7 +22,9 @@ public sealed record RenderText(
     double WidthFactor,
     TextHorizontalAlignment Alignment,
     CadColor Color,
-    BoundingBox Bounds);
+    BoundingBox Bounds,
+    string FontFamily = TextStyle.DefaultFamily,
+    double Oblique = 0);
 
 /// <summary>
 /// Aree piene dello stesso colore (riempimenti, frecce di quota). Gli anelli sono già orientati per la regola
