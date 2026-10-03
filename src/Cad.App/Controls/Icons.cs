@@ -91,6 +91,10 @@ public static class Icons
         ["STAMPA"] = ("M6,9v-6h12v6 M6,17h-3v-8h18v8h-3", "M6,14h12v7h-12z M9,17h6"),
         ["ESPORTAPDF"] = ("M6,3h8l4,4v14h-12z M14,3v4h4", "M8.5,17v-5h2a1.5,1.5 0 0 1 0,3h-2 M13,12v5 M13,12h3 M13,14.5h2"),
         ["CHIUDI"] = ("M4,4h16v16h-16z", "M8,8 L16,16 M16,8 L8,16"),
+        ["CORRISPONDENZA"] = ("M3,21 L11,13 M9,11 L13,15", "M12,12 L19,5 A2,2 0 0 1 22,8 L15,15z M3,21 C5,21 7,20 8,18"),
+        ["COPIAPROP"] = ("M3,9h11v12h-11z M6,13h5 M6,16h5", "M9,3h12v12h-12z M12,7h6 M12,10h6"),
+        ["INCOLLAPROP"] = ("M7,5h-3v17h16v-17h-3 M8,3h8v4h-8z", "M8,12h3 M13,12h3 M8,16h3 M13,16h3"),
+        ["DLGPROPSALVATE"] = ("M4,4h13l3,3v13h-16z M8,4v4h6v-4", "M7,13h10 M7,16h10 M7,19h6"),
         ["TEMA"] = ("M12,3 A9,9 0 1 0 12,21z", "M12,3 A9,9 0 0 1 12,21z"),
     };
 

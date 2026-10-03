@@ -142,12 +142,21 @@ larghezza si cambiano nella palette Proprietà.
 | COLORE | COL | per la selezione o per i nuovi oggetti |
 | TIPOLINEA | LT | CONTINUOUS, DASHED, HIDDEN, CENTER, DASHDOT, PHANTOM, DOT |
 | SCALATL | LTS | scala globale dei tipi di linea |
+| CORRISPONDENZA | MA, MATCHPROP | copia le proprietà di un oggetto su altri; Impostazioni sceglie quali |
+| COPIAPROP, INCOLLAPROP | COPYPROP, PASTEPROP | copia e incolla le proprietà, anche da un disegno a un altro |
+| SALVAPROP, APPLICAPROP | SAVEPROP, APPLYPROP | proprietà salvate con un nome, comuni a tutti i disegni |
 
 Le caselle in Home > Layer e proprietà cambiano layer, colore e tipo di linea degli oggetti selezionati, oppure quelli
 dei nuovi oggetti se non c'è selezione. La palette Proprietà (a destra) mostra e modifica tutti i dati degli oggetti
 selezionati: geometria, testo, quota, spessore di linea; i valori diversi tra più oggetti appaiono come *Vari*.
 Il gestore layer (Home > Layer) è una tabella con stato, colore, tipo e spessore di linea di ogni layer; la palette
 Layer ne è la versione compatta. LWT nella barra di stato mostra gli spessori.
+
+Le proprietà copiate sono layer, colore, tipo, scala e spessore di linea e, per gli oggetti che li hanno, stile e
+altezza dei testi, stile di quota e motivo del tratteggio. Un layer che manca nel disegno di destinazione viene creato.
+Le proprietà salvate (Gestisci > Proprietà > Salvate, o il pulsante in cima alla palette Proprietà) si prendono
+dall'oggetto selezionato o da quelle correnti, e si applicano alla selezione o diventano quelle dei nuovi oggetti.
+Restano in `%AppData%\CAD2D\proprieta.json`.
 
 ### Misure e appunti
 

@@ -231,7 +231,14 @@ public sealed class PlotDialog : Window
         }
 
         var ok = scale is not null || _settings.Fit;
-        _scale.BorderBrush = ok ? null : Brushes.IndianRed;
+        if (ok)
+        {
+            _scale.ClearValue(BorderBrushProperty);
+        }
+        else
+        {
+            _scale.BorderBrush = Brushes.IndianRed;
+        }
         return ok;
     }
 

@@ -30,9 +30,29 @@ public sealed class PropertiesPalette : UserControl
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(10, 0, 10, 8),
         }.Themed(TextBlock.ForegroundProperty, "Cad.Subtle");
+        // Strumenti delle proprietà accanto al titolo: corrispondenza, copia, incolla e proprietà salvate.
+        var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 6, 2) };
+        foreach (var (command, tip) in new[]
+                 {
+                     ("CORRISPONDENZA", "Corrispondenza: copia le proprietà di un oggetto su altri (MA)"),
+                     ("COPIAPROP", "Copia le proprietà dell'oggetto selezionato"),
+                     ("INCOLLAPROP", "Incolla le proprietà copiate sugli oggetti selezionati (anche in un altro disegno)"),
+                     ("DLGPROPSALVATE", "Proprietà salvate: salva, applica, rendi correnti"),
+                 })
+        {
+            var button = new Button { Content = Icons.Create(command, 16), Padding = new Thickness(4, 3), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Focusable = false };
+            ToolTip.SetTip(button, tip);
+            button.Click += (_, _) => CommandRequested?.Invoke(this, command);
+            tools.Children.Add(button);
+        }
+
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        top.Children.Add(_header);
+        Grid.SetColumn(tools, 1);
+        top.Children.Add(tools);
         var panel = new DockPanel();
-        DockPanel.SetDock(_header, Dock.Top);
-        panel.Children.Add(_header);
+        DockPanel.SetDock(top, Dock.Top);
+        panel.Children.Add(top);
         DockPanel.SetDock(hint, Dock.Top);
         panel.Children.Add(hint);
         panel.Children.Add(new ScrollViewer { Content = _rows });
@@ -41,6 +61,9 @@ public sealed class PropertiesPalette : UserControl
     }
 
     private readonly TextBlock _hint;
+
+    /// <summary>Comando chiesto da uno dei pulsanti degli strumenti.</summary>
+    public event EventHandler<string>? CommandRequested;
 
     /// <summary>Sollevato dopo ogni modifica, per restituire il fuoco alla riga di comando.</summary>
     public event EventHandler? Committed;

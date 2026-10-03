@@ -75,6 +75,11 @@
         <Separator />
         <MenuItem Header="_Gruppo" Click="OnMenuCommand" Tag="GRUPPO" />
         <MenuItem Header="Sepa_ra gruppo" Click="OnMenuCommand" Tag="SEPARA" />
+        <Separator />
+        <MenuItem Header="Corrispon_denza proprietà" Click="OnMenuCommand" Tag="CORRISPONDENZA" />
+        <MenuItem Header="Copia propr_ietà" Click="OnMenuCommand" Tag="COPIAPROP" />
+        <MenuItem Header="Incolla propri_età" Click="OnMenuCommand" Tag="INCOLLAPROP" />
+        <MenuItem Header="Proprietà sal_vate..." Click="OnMenuCommand" Tag="DLGPROPSALVATE" />
       </MenuItem>
       <MenuItem Header="_Disegna">
         <MenuItem Header="_Linea" Click="OnMenuCommand" Tag="LINEA" />

@@ -308,6 +308,13 @@ public sealed class Ribbon : TabControl
                 new("TIPOLINEA", "Tipo linea", "Tipo di linea della selezione o dei nuovi oggetti"),
                 new("SCALATL", "Scala TL", "Scala globale dei tipi di linea"),
             ]),
+            new("Proprietà",
+            [
+                new("CORRISPONDENZA", "Corrispondenza", "Copia le proprietà di un oggetto su altri oggetti (MA)", Large: true),
+                new("DLGPROPSALVATE", "Salvate", "Proprietà salvate con un nome: salva, applica, rendi correnti", Large: true),
+                new("COPIAPROP", "Copia prop.", "Copia le proprietà di un oggetto, da incollare anche in un altro disegno"),
+                new("INCOLLAPROP", "Incolla prop.", "Incolla le proprietà copiate sugli oggetti selezionati"),
+            ]),
             new("Programma",
             [
                 new("OPZIONI", "Opzioni", "Griglia, tracciamento, snap, tema", Large: true),

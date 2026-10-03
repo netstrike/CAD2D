@@ -49,6 +49,7 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         BuildSnapMenu();
         BuildRibbon();
+        PropertyCommands.SettingsDialog = () => new MatchSettingsDialog().ShowDialog(this);
         BuildPalettes();
         Canvas.ContextMenuRequested += (_, at) => ShowCanvasMenu(at);
     }
@@ -95,6 +96,7 @@ public partial class MainWindow : Window
             LayerPalette.IsVisible = PaletteTabs.SelectedIndex == 1;
         };
         PropertiesPanel.Committed += (_, _) => CommandBox.Focus();
+        PropertiesPanel.CommandRequested += (_, command) => RunUiCommand(command);
 
         // Tasto destro su ESNAP: gli stessi tipi di snap del menu Strumenti.
         var snapItems = new List<MenuItem>();
@@ -150,7 +152,7 @@ public partial class MainWindow : Window
                 GroupToggle.IsChecked = GroupToggle.IsChecked != true;
                 AppendHistory(GroupToggle.IsChecked == true ? "<Selezione dei gruppi attiva>" : "<Selezione dei gruppi disattivata>");
                 break;
-            case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "DLGSTILETESTO" or "OPZIONI" or "DLGSCALA" or "DLGIMMAGINE":
+            case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "DLGSTILETESTO" or "OPZIONI" or "DLGSCALA" or "DLGIMMAGINE" or "DLGPROPSALVATE":
                 ShowDialogCommand(command);
                 return;
             case "TEMA":
@@ -217,6 +219,13 @@ public partial class MainWindow : Window
 
                 items.Add(new Separator());
                 Add("Proprietà", () => ShowPalette(0), "PROPRIETA");
+                Add("Copia proprietà", () => editor.RunCommand("COPIAPROP"), "COPIAPROP");
+                if (PropertyCommands.Clipboard is not null)
+                {
+                    Add("Incolla proprietà", () => editor.RunCommand("INCOLLAPROP"), "INCOLLAPROP");
+                }
+
+                Add("Proprietà salvate...", () => RunUiCommand("DLGPROPSALVATE"), "DLGPROPSALVATE");
                 Add("Deseleziona tutto", () => editor.Selection.Clear());
             }
             else
@@ -318,6 +327,12 @@ public partial class MainWindow : Window
                     AttachImage(dialog.FilePath, dialog.ImageOpacity);
                 }
 
+                break;
+            }
+
+            case "DLGPROPSALVATE":
+            {
+                await new PropertySetsDialog(editor, AppendHistory).ShowDialog(this);
                 break;
             }
 

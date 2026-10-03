@@ -472,7 +472,7 @@ public sealed class Editor
     /// Entità su cui operare: se c'è già una selezione si usa quella, altrimenti si selezionano con clic e finestre
     /// e si conferma con Invio. Restituisce null se annullato o se non è stato selezionato nulla.
     /// </summary>
-    public async Task<IReadOnlyList<Entity>?> GetSelectionAsync(string prompt = "Seleziona entità:")
+    public async Task<IReadOnlyList<Entity>?> GetSelectionAsync(string prompt = "Seleziona entità:", bool reportEmpty = true)
     {
         if (Selection.Count == 0)
         {
@@ -485,7 +485,11 @@ public sealed class Editor
 
         if (Selection.Count == 0)
         {
-            Write("Nessuna entità selezionata.");
+            if (reportEmpty)
+            {
+                Write("Nessuna entità selezionata.");
+            }
+
             return null;
         }
 
