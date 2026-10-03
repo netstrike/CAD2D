@@ -6,6 +6,7 @@ using Avalonia.Skia;
 using Cad.Document;
 using Cad.Editing;
 using Cad.Geometry;
+using Cad.Plot;
 using SkiaSharp;
 
 namespace Cad.App.Controls;
@@ -33,10 +34,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
     private const double LineweightPixelsPerMm = 4;
 
     private static readonly SKColor TrackingColor = new(0x60, 0xD0, 0x60);
-    private static readonly SKTypeface TextTypeface = SKTypeface.FromFamilyName("Arial") ?? SKTypeface.Default;
-    private static readonly Dictionary<string, SKTypeface> Typefaces = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly SKTypeface LabelTypeface = SKTypeface.FromFamilyName("Segoe UI") ?? TextTypeface;
-    private static readonly float CapHeightRatio = MeasureCapHeightRatio();
+    private static readonly SKTypeface LabelTypeface = SKTypeface.FromFamilyName("Segoe UI") ?? TextPainter.DefaultTypeface;
 
     private bool Light => geometry.Light;
     private SKColor Background => Light ? SKColors.White : new SKColor(0x21, 0x21, 0x21);
@@ -111,44 +109,12 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
         canvas.Restore();
     }
 
-    /// <summary>Immagini decodificate una volta per file; null se il file manca o non si legge (resta la cornice).</summary>
-    private static readonly Dictionary<string, (DateTime Modified, SKImage? Image)> ImageCache = new(StringComparer.OrdinalIgnoreCase);
-
-    private static SKImage? LoadImage(string path)
-    {
-        var modified = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
-        lock (ImageCache)
-        {
-            if (ImageCache.TryGetValue(path, out var cached) && cached.Modified == modified)
-            {
-                return cached.Image;
-            }
-
-            SKImage? image = null;
-            try
-            {
-                if (modified != DateTime.MinValue)
-                {
-                    using var data = SKData.Create(path);
-                    image = data is null ? null : SKImage.FromEncodedData(data);
-                }
-            }
-            catch (IOException)
-            {
-            }
-
-            cached.Image?.Dispose();
-            ImageCache[path] = (modified, image);
-            return image;
-        }
-    }
-
     private void DrawImages(SKCanvas canvas)
     {
         using var paint = new SKPaint { IsAntialias = true, FilterQuality = SKFilterQuality.Medium };
         foreach (var item in geometry.Scene.Images)
         {
-            if (!visibleWorld.Intersects(item.Bounds) || LoadImage(item.Path) is not { } image)
+            if (!visibleWorld.Intersects(item.Bounds) || PlotRenderer.LoadImage(item.Path) is not { } image)
             {
                 continue;
             }
@@ -186,7 +152,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
     private void DrawTexts(SKCanvas canvas)
     {
         var scale = worldToScreen.TransformVector(Vector2.UnitX).Length;
-        using var paint = new SKPaint { Typeface = TextTypeface, IsAntialias = true, Style = SKPaintStyle.Fill };
+        using var paint = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         foreach (var text in geometry.Scene.TextIndex.Query(visibleWorld))
         {
             var pixels = text.Height * scale;
@@ -197,43 +163,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
 
             var p = worldToScreen.Transform(text.Position);
             paint.Color = SceneGeometry.ToSkColor(text.Color, Light);
-            paint.Typeface = Typeface(text.FontFamily);
-            paint.TextSize = (float)(pixels / CapHeightRatio);
-            paint.TextAlign = text.Alignment switch
-            {
-                TextHorizontalAlignment.Center => SKTextAlign.Center,
-                TextHorizontalAlignment.Right => SKTextAlign.Right,
-                _ => SKTextAlign.Left,
-            };
-
-            canvas.Save();
-            canvas.Translate((float)p.X, (float)p.Y);
-            // Lo schermo ha la Y verso il basso: la rotazione antioraria del disegno diventa negativa.
-            canvas.RotateRadians((float)-text.Rotation);
-            canvas.Scale((float)text.WidthFactor, 1);
-            if (text.Oblique != 0)
-            {
-                // La Y dello schermo va verso il basso: per inclinare a destra la parte alta si sposta verso X positive.
-                canvas.Skew((float)-Math.Tan(text.Oblique), 0);
-            }
-
-            canvas.DrawText(text.Text, 0, 0, paint);
-            canvas.Restore();
-        }
-    }
-
-    /// <summary>Carattere di una famiglia, cercato una volta sola; Arial se la famiglia non è installata.</summary>
-    private static SKTypeface Typeface(string family)
-    {
-        lock (Typefaces)
-        {
-            if (!Typefaces.TryGetValue(family, out var typeface))
-            {
-                typeface = SKFontManager.Default.MatchFamily(family) ?? TextTypeface;
-                Typefaces[family] = typeface;
-            }
-
-            return typeface;
+            TextPainter.Draw(canvas, text, p.X, p.Y, pixels, paint);
         }
     }
 
@@ -556,13 +486,5 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
         canvas.DrawLine(x, y, x + length, y, paint);
         paint.Color = AxisYColor;
         canvas.DrawLine(x, y, x, y - length, paint);
-    }
-
-    /// <summary>Altezza delle maiuscole rispetto alla dimensione del font: l'altezza dei testi CAD si riferisce alle maiuscole.</summary>
-    private static float MeasureCapHeightRatio()
-    {
-        using var paint = new SKPaint { Typeface = TextTypeface, TextSize = 100 };
-        var capHeight = paint.FontMetrics.CapHeight;
-        return capHeight > 0 ? capHeight / 100 : 0.7f;
     }
 }

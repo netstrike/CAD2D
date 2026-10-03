@@ -440,12 +440,63 @@ public static class DxfExporter
     /// <summary>Usa l'indice ACI se il colore ne ha uno identico, altrimenti il colore RGB.</summary>
     private static Acad.Color ToAcadColor(CadColor rgb)
     {
-        var index = Acad.Color.ApproxIndex(rgb.R, rgb.G, rgb.B);
-        var candidate = new Acad.Color(index);
-        var values = candidate.GetRgb();
-        return values.Length >= 3 && values[0] == rgb.R && values[1] == rgb.G && values[2] == rgb.B
-            ? candidate
-            : new Acad.Color(rgb.R, rgb.G, rgb.B);
+        var index = NearestIndex(rgb.R, rgb.G, rgb.B);
+        var values = IndexRgb[index];
+        return values.R == rgb.R && values.G == rgb.G && values.B == rgb.B ? new Acad.Color(index) : new Acad.Color(rgb.R, rgb.G, rgb.B);
+    }
+
+    private static readonly (byte R, byte G, byte B)[] IndexRgb = [.. Enumerable.Range(0, 256).Select(i =>
+    {
+        var rgb = new Acad.Color((short)i).GetRgb();
+        return (rgb[0], rgb[1], rgb[2]);
+    })];
+
+    /// <summary>
+    /// Indice ACI (1-255) più vicino a un colore RGB. Quello di ACadSharp (Color.ApproxIndex) somma differenze con il
+    /// segno e restituisce indici sbagliati: il ciano diventerebbe giallo.
+    /// </summary>
+    internal static short NearestIndex(byte r, byte g, byte b)
+    {
+        var best = 7;
+        var bestDistance = int.MaxValue;
+        for (var i = 1; i < 256; i++)
+        {
+            var (ir, ig, ib) = IndexRgb[i];
+            var distance = (r - ir) * (r - ir) + (g - ig) * (g - ig) + (b - ib) * (b - ib);
+            if (distance < bestDistance)
+            {
+                best = i;
+                bestDistance = distance;
+                if (distance == 0)
+                {
+                    break;
+                }
+            }
+        }
+
+        return (short)best;
+    }
+
+    /// <summary>
+    /// I DWG fino al 2000 non hanno colori RGB: ACadSharp li scriverebbe con il suo indice sbagliato, quindi si
+    /// convertono qui all'indice più vicino, su layer e oggetti.
+    /// </summary>
+    internal static void IndexTrueColors(Acad.CadDocument target)
+    {
+        static Acad.Color Indexed(Acad.Color color) => color.IsTrueColor ? new Acad.Color(NearestIndex(color.R, color.G, color.B)) : color;
+
+        foreach (var layer in target.Layers)
+        {
+            layer.Color = Indexed(layer.Color);
+        }
+
+        foreach (var record in target.BlockRecords)
+        {
+            foreach (var entity in record.Entities)
+            {
+                entity.Color = Indexed(entity.Color);
+            }
+        }
     }
 
     /// <summary>Converte entità del modello in entità ACadSharp, creando i blocchi che mancano nel file.</summary>

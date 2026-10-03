@@ -10,6 +10,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Cad.Geometry\Cad.Geometry.csproj" />
@@ -17,6 +18,7 @@
     <ProjectReference Include="..\Cad.IO\Cad.IO.csproj" />
     <ProjectReference Include="..\Cad.Rendering\Cad.Rendering.csproj" />
     <ProjectReference Include="..\Cad.Editing\Cad.Editing.csproj" />
+    <ProjectReference Include="..\Cad.Plot\Cad.Plot.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\samples\demo.dxf" Link="samples\demo.dxf" CopyToOutputDirectory="PreserveNewest" />

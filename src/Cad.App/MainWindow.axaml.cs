@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Cad.Document;
 using Cad.Editing;
+using Cad.Geometry;
 using Cad.IO;
 
 namespace Cad.App;
@@ -18,6 +19,8 @@ public partial class MainWindow : Window
     private const int MaxHistoryLines = 300;
 
     private static readonly FilePickerFileType DxfFiles = new("Disegni DXF") { Patterns = ["*.dxf"] };
+    private static readonly FilePickerFileType DwgFiles = new("Disegni DWG") { Patterns = ["*.dwg"] };
+    private static readonly FilePickerFileType DrawingFiles = new("Disegni DXF e DWG") { Patterns = ["*.dxf", "*.dwg"] };
 
     private readonly List<string> _history = [];
     private Editor? _editor;
@@ -63,6 +66,7 @@ public partial class MainWindow : Window
             ("APRI", "Apri (Ctrl+O)"),
             ("SALVA", "Salva (Ctrl+S)"),
             ("SALVACOME", "Salva con nome (Ctrl+Maiusc+S)"),
+            ("STAMPA", "Stampa (Ctrl+P)"),
             ("ANNULLA", "Annulla (Ctrl+Z)"),
             ("RIPETI", "Ripeti (Ctrl+Y)"),
         ];
@@ -438,71 +442,249 @@ public partial class MainWindow : Window
         base.OnLoaded(e);
         CommandBox.Focus();
 
-        // Primo argomento della riga di comando, altrimenti il disegno di esempio.
-        var path = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault()
-                   ?? Path.Combine(AppContext.BaseDirectory, "samples", "demo.dxf");
-        if (File.Exists(path))
+        // Argomenti della riga di comando, altrimenti il disegno di esempio.
+        var paths = Environment.GetCommandLineArgs().Skip(1).Where(File.Exists).ToList();
+        if (paths.Count == 0 && Path.Combine(AppContext.BaseDirectory, "samples", "demo.dxf") is var demo && File.Exists(demo) && Environment.GetCommandLineArgs().Length == 1)
+        {
+            paths.Add(demo);
+        }
+
+        if (paths.Count == 0)
+        {
+            ShowDocument(new CadDocument());
+            StatusText.Text = "File > Apri (Ctrl+O) oppure trascina qui un DXF, un DWG o un'immagine da ricalcare";
+        }
+
+        foreach (var path in paths)
         {
             await OpenAsync(path);
-        }
-        else
-        {
-            SetDocument(new CadDocument());
-            StatusText.Text = "File > Apri (Ctrl+O) oppure trascina qui un file DXF o un'immagine da ricalcare";
         }
     }
 
     protected override async void OnClosing(WindowClosingEventArgs e)
     {
         base.OnClosing(e);
-        if (_closeConfirmed || _editor?.Document.IsModified != true)
+        if (_closeConfirmed || _tabs.All(t => !t.Editor.Document.IsModified))
         {
             return;
         }
 
         e.Cancel = true;
-        if (await ConfirmDiscardAsync())
+        foreach (var tab in _tabs.Where(t => t.Editor.Document.IsModified).ToList())
         {
-            _closeConfirmed = true;
-            Close();
+            Activate(tab);
+            if (!await ConfirmDiscardAsync())
+            {
+                return;
+            }
+        }
+
+        _closeConfirmed = true;
+        Close();
+    }
+
+    // ---------- Documenti ----------
+
+    /// <summary>Un disegno aperto: il suo editor (con selezione, annulla e comando in corso) e la vista da ripristinare.</summary>
+    private sealed class DocumentTab(Editor editor)
+    {
+        public Editor Editor { get; } = editor;
+        public Vector2? Center { get; set; }
+        public double Scale { get; set; } = 1;
+
+        /// <summary>Ultime impostazioni di stampa del disegno, riproposte alla stampa successiva.</summary>
+        public Cad.Plot.PlotSettings? Plot { get; set; }
+        public string PlotDestination { get; set; } = PlotDialog.Pdf;
+
+        public string Title => Editor.Document.FilePath is { } path ? Path.GetFileName(path) : "Senza nome";
+
+        /// <summary>Disegno nuovo mai toccato: aprendo un file ne prende il posto, come negli altri CAD.</summary>
+        public bool IsPristine => Editor.Document is { FilePath: null, IsModified: false, ModelSpace.Count: 0 } && !Editor.Document.History.CanUndo;
+    }
+
+    private readonly List<DocumentTab> _tabs = [];
+    private DocumentTab? _activeTab;
+
+    /// <summary>Mostra un documento in una scheda nuova (o al posto di un disegno nuovo vuoto) e la attiva.</summary>
+    private void ShowDocument(CadDocument document)
+    {
+        var editor = new Editor(document);
+        RegisterUiCommands(editor);
+        editor.Selection.Changed += (_, _) =>
+        {
+            if (ReferenceEquals(editor, _editor))
+            {
+                RefreshProperties();
+            }
+        };
+
+        var tab = new DocumentTab(editor);
+        var replaced = _activeTab is { IsPristine: true } pristine ? pristine : null;
+        var index = replaced is null ? _tabs.Count : _tabs.IndexOf(replaced);
+        _tabs.Insert(index, tab);
+        Activate(tab);
+        if (replaced is not null)
+        {
+            _tabs.Remove(replaced);
+            RefreshTabs();
         }
     }
 
-    // ---------- Documento ----------
-
-    private void SetDocument(CadDocument document)
+    /// <summary>Porta in primo piano un disegno aperto: la riga di comando, le palette e la vista passano a lui.</summary>
+    private void Activate(DocumentTab tab)
     {
-        if (_editor is not null)
+        if (ReferenceEquals(tab, _activeTab))
         {
-            _editor.Message -= AppendHistory;
-            _editor.StateChanged -= OnEditorStateChanged;
-            _editor.Document.Changed -= OnDocumentChanged;
-            _editor.Cancel();
+            return;
         }
 
-        var editor = new Editor(document)
+        if (_activeTab is { } previous)
         {
-            SnapModes = _snapModes,
-        };
+            previous.Center = Canvas.View.Center;
+            previous.Scale = Canvas.View.Scale;
+            var old = previous.Editor;
+            old.Cancel();
+            old.Message -= AppendHistory;
+            old.StateChanged -= OnEditorStateChanged;
+            old.Document.Changed -= OnDocumentChanged;
+        }
+
+        _activeTab = tab;
+        var editor = tab.Editor;
+        editor.SnapModes = _snapModes;
         ApplyDraftingToggles(editor);
-        RegisterUiCommands(editor);
         editor.Message += AppendHistory;
         editor.StateChanged += OnEditorStateChanged;
-        document.Changed += OnDocumentChanged;
+        editor.Document.Changed += OnDocumentChanged;
         _editor = editor;
 
         Canvas.Editor = editor;
+        if (tab.Center is { } center)
+        {
+            Canvas.RestoreView(center, tab.Scale);
+        }
+
         PropertiesPanel.Editor = editor;
-        editor.Selection.Changed += (_, _) => RefreshProperties();
+        RefreshProperties();
         RefreshLayers(force: true);
         UpdateTitle();
         _shownKeywords = [];
         UpdateKeywordButtons();
+        RefreshTabs();
+    }
+
+    /// <summary>Chiude un disegno (chiedendo se salvarlo); se era l'ultimo ne resta uno nuovo vuoto.</summary>
+    private async Task<bool> CloseTabAsync(DocumentTab tab)
+    {
+        if (tab.Editor.Document.IsModified)
+        {
+            Activate(tab);
+            if (!await ConfirmDiscardAsync())
+            {
+                return false;
+            }
+        }
+
+        var index = _tabs.IndexOf(tab);
+        if (_tabs.Count == 1)
+        {
+            ShowDocument(new CadDocument());
+            _tabs.Remove(tab);
+            RefreshTabs();
+            return true;
+        }
+
+        if (ReferenceEquals(tab, _activeTab))
+        {
+            Activate(_tabs[index == _tabs.Count - 1 ? index - 1 : index + 1]);
+        }
+
+        _tabs.Remove(tab);
+        RefreshTabs();
+        return true;
+    }
+
+    /// <summary>Passa al disegno successivo (Ctrl+Tab) o precedente (Ctrl+Maiusc+Tab).</summary>
+    private void CycleTabs(int step)
+    {
+        if (_activeTab is not null && _tabs.Count > 1)
+        {
+            Activate(_tabs[(_tabs.IndexOf(_activeTab) + step + _tabs.Count) % _tabs.Count]);
+        }
+    }
+
+    private void RefreshTabs()
+    {
+        DocumentTabBar.Children.Clear();
+        foreach (var tab in _tabs)
+        {
+            var active = ReferenceEquals(tab, _activeTab);
+            var title = new TextBlock
+            {
+                Text = tab.Title + (tab.Editor.Document.IsModified ? " *" : ""),
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                FontSize = 12,
+            };
+            title.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable(active ? "Cad.Text1" : "Cad.Text2"));
+            var close = new Button
+            {
+                Content = "×",
+                Padding = new Thickness(5, 0),
+                Margin = new Thickness(6, 0, 0, 0),
+                FontSize = 13,
+                Background = Brushes.Transparent,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            ToolTip.SetTip(close, "Chiudi il disegno (Ctrl+F4)");
+            close.Click += async (_, e) =>
+            {
+                e.Handled = true;
+                await CloseTabAsync(tab);
+                CommandBox.Focus();
+            };
+            var item = new Border
+            {
+                Padding = new Thickness(12, 4, 4, 4),
+                BorderThickness = new Thickness(0, 0, 1, 0),
+                Background = Brushes.Transparent,
+                Child = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Children = { title, close } },
+                Cursor = new Cursor(StandardCursorType.Hand),
+            };
+            // Risorse dinamiche: seguono il tema chiaro o scuro anche dopo il cambio.
+            item.Bind(Border.BorderBrushProperty, this.GetResourceObservable("Cad.Border"));
+            if (active)
+            {
+                item.Bind(Border.BackgroundProperty, this.GetResourceObservable("Cad.Panel"));
+            }
+
+            ToolTip.SetTip(item, tab.Editor.Document.FilePath ?? "Disegno non ancora salvato");
+            if (active)
+            {
+                item.BorderThickness = new Thickness(0, 0, 1, 0);
+                title.FontWeight = FontWeight.SemiBold;
+            }
+
+            item.PointerPressed += (_, e) =>
+            {
+                if (e.GetCurrentPoint(item).Properties.IsMiddleButtonPressed)
+                {
+                    _ = CloseTabAsync(tab);
+                }
+                else
+                {
+                    Activate(tab);
+                }
+
+                CommandBox.Focus();
+            };
+            DocumentTabBar.Children.Add(item);
+        }
     }
 
     private void OnDocumentChanged(object? sender, EventArgs e)
     {
         UpdateTitle();
+        RefreshTabs();
         // Dopo il giro corrente: il cambio può arrivare da una casella della lista stessa.
         Avalonia.Threading.Dispatcher.UIThread.Post(() => RefreshLayers());
     }
@@ -575,7 +757,10 @@ public partial class MainWindow : Window
         editor.RegisterCommand("SALVACOME", _ => SaveAsync(saveAs: true), "SAVEAS");
         editor.RegisterCommand("APRI", _ => OpenWithPickerAsync(), "OPEN");
         editor.RegisterCommand("NUOVO", _ => NewAsync(), "NEW");
+        editor.RegisterCommand("CHIUDI", _ => _activeTab is { } tab ? CloseTabAsync(tab) : Task.CompletedTask, "CLOSE");
         editor.RegisterCommand("ZOOM", ZoomAsync, "Z");
+        editor.RegisterCommand("STAMPA", ed => PlotAsync(ed, null), "PLOT", "PRINT");
+        editor.RegisterCommand("ESPORTAPDF", ed => PlotAsync(ed, PlotDialog.Pdf), "EXPORTPDF", "PDF");
     }
 
     private async Task ZoomAsync(Editor ed)
@@ -615,8 +800,8 @@ public partial class MainWindow : Window
             {
                 Title = "Salva disegno",
                 SuggestedFileName = path is null ? "Disegno1.dxf" : Path.GetFileName(path),
-                DefaultExtension = "dxf",
-                FileTypeChoices = [DxfFiles],
+                DefaultExtension = path is not null && CadFile.IsDwg(path) ? "dwg" : "dxf",
+                FileTypeChoices = path is not null && CadFile.IsDwg(path) ? [DwgFiles, DxfFiles] : [DxfFiles, DwgFiles],
                 ShowOverwritePrompt = true,
             });
             path = file?.TryGetLocalPath();
@@ -628,8 +813,9 @@ public partial class MainWindow : Window
 
         try
         {
-            DxfExporter.Save(document, path);
+            CadFile.Save(document, path);
             AppendHistory($"Salvato in {path}");
+            RefreshTabs();
             StatusText.Text = $"Salvato: {Path.GetFileName(path)}";
             UpdateTitle();
             return true;
@@ -658,22 +844,28 @@ public partial class MainWindow : Window
         };
     }
 
-    private async Task NewAsync()
+    private Task NewAsync()
     {
-        if (await ConfirmDiscardAsync())
-        {
-            SetDocument(new CadDocument());
-            StatusText.Text = "Nuovo disegno";
-        }
+        ShowDocument(new CadDocument());
+        StatusText.Text = "Nuovo disegno";
+        return Task.CompletedTask;
     }
 
     private async Task OpenAsync(string path)
     {
+        // Un file già aperto torna solo in primo piano.
+        var full = Path.GetFullPath(path);
+        if (_tabs.FirstOrDefault(t => t.Editor.Document.FilePath is { } p && string.Equals(Path.GetFullPath(p), full, StringComparison.OrdinalIgnoreCase)) is { } open)
+        {
+            Activate(open);
+            return;
+        }
+
         StatusText.Text = $"Apertura di {Path.GetFileName(path)}...";
         try
         {
-            var result = await Task.Run(() => DxfImporter.Load(path));
-            SetDocument(result.Document);
+            var result = await Task.Run(() => CadFile.Load(path));
+            ShowDocument(result.Document);
             StatusText.Text = DescribeImport(path, result);
         }
         catch (Exception ex)
@@ -701,21 +893,19 @@ public partial class MainWindow : Window
 
     private async Task OpenWithPickerAsync()
     {
-        if (!await ConfirmDiscardAsync())
-        {
-            return;
-        }
-
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Apri disegno",
-            AllowMultiple = false,
-            FileTypeFilter = [DxfFiles, FilePickerFileTypes.All],
+            AllowMultiple = true,
+            FileTypeFilter = [DrawingFiles, DxfFiles, DwgFiles, FilePickerFileTypes.All],
         });
 
-        if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+        foreach (var file in files)
         {
-            await OpenAsync(path);
+            if (file.TryGetLocalPath() is { } path)
+            {
+                await OpenAsync(path);
+            }
         }
     }
 
@@ -726,12 +916,12 @@ public partial class MainWindow : Window
 #pragma warning restore CS0618
         if (file?.TryGetLocalPath() is { } image && ImageEntity.ReadPixelSize(image) is not null)
         {
-            // Un'immagine trascinata nel disegno si inserisce da ricalcare; un DXF si apre.
+            // Un'immagine trascinata nel disegno si inserisce da ricalcare; un DXF o un DWG si apre in una scheda.
             AttachImage(image, 50);
             return;
         }
 
-        if (file?.TryGetLocalPath() is { } path && await ConfirmDiscardAsync())
+        if (file?.TryGetLocalPath() is { } path)
         {
             await OpenAsync(path);
         }
@@ -757,8 +947,17 @@ public partial class MainWindow : Window
             (Key.S, true, true) => "SALVACOME",
             (Key.O, true, false) => "APRI",
             (Key.N, true, false) => "NUOVO",
+            (Key.F4, true, false) => "CHIUDI",
+            (Key.P, true, false) => "STAMPA",
             _ => null,
         };
+
+        if (ctrl && e.Key == Key.Tab)
+        {
+            CycleTabs(shift ? -1 : 1);
+            e.Handled = true;
+            return;
+        }
 
         command ??= ClipboardShortcut(e, ctrl, shift);
         if (command is not null)

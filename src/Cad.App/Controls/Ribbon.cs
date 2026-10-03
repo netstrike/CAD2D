@@ -279,6 +279,19 @@ public sealed class Ribbon : TabControl
                 new("TEMA", "Tema", "Passa dal tema scuro a quello chiaro e viceversa", Large: true),
             ]),
         ]),
+        new("Output",
+        [
+            new("Stampa",
+            [
+                new("STAMPA", "Stampa", "Stampa in scala su stampante, PDF, SVG o PNG, con anteprima (Ctrl+P)", Large: true),
+                new("ESPORTAPDF", "PDF", "Esporta il foglio in PDF vettoriale", Large: true),
+            ]),
+            new("File",
+            [
+                new("SALVACOME", "Salva come", "Salva in DXF o DWG (Ctrl+Maiusc+S)", Large: true),
+                new("CHIUDI", "Chiudi", "Chiude il disegno corrente (Ctrl+F4)", Large: true),
+            ]),
+        ]),
         new("Gestisci",
         [
             new("Misura",

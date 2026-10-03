@@ -15,6 +15,9 @@ public sealed class DxfSource(Acad.CadDocument document)
     public Acad.CadDocument Document { get; } = document;
 
     public HashSet<object> ConvertedEntities { get; } = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Versione del DWG da cui è stato letto il disegno; null se viene da un DXF o è nuovo.</summary>
+    public Acad.ACadVersion? DwgVersion { get; set; }
 }
 
 /// <summary>Risultato di un'importazione: il documento e gli errori segnalati dal lettore (parti del file saltate).</summary>
@@ -45,7 +48,7 @@ public static class DxfImporter
     /// <summary>
     /// Le immagini collegate con un percorso relativo, o spostate insieme al disegno, si cercano nella cartella del DXF.
     /// </summary>
-    private static void ResolveImagePaths(CadDocument document, string folder)
+    internal static void ResolveImagePaths(CadDocument document, string folder)
     {
         foreach (var image in document.ModelSpace.OfType<ImageEntity>())
         {

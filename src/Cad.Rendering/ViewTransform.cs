@@ -57,6 +57,13 @@ public sealed class ViewTransform
         Center += anchor - moved;
     }
 
+    /// <summary>Riporta la vista a un centro e a una scala salvati (per esempio tornando a un disegno già aperto).</summary>
+    public void SetView(Vector2 center, double scale)
+    {
+        Center = center;
+        Scale = Math.Clamp(scale, MinScale, MaxScale);
+    }
+
     /// <summary>Inquadra <paramref name="bounds"/> lasciando un margine in pixel su ogni lato.</summary>
     public void ZoomExtents(BoundingBox bounds, double marginPixels = 20)
     {

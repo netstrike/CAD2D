@@ -10,8 +10,9 @@ Stack: C# su .NET 8, Avalonia per l'interfaccia, SkiaSharp per il disegno, ACadS
 | --- | --- |
 | `src/Cad.Geometry` | Vettori, matrici, bounding box, segmenti, cerchi, intersezioni. Nessuna dipendenza dalla UI. |
 | `src/Cad.Document` | Modello del disegno: layer, entità, blocchi, indice spaziale (R-tree). |
-| `src/Cad.IO` | Lettura e scrittura DXF con ACadSharp, conversione dei codici di testo. Il salvataggio conserva tutto ciò che non è stato modificato. |
+| `src/Cad.IO` | Lettura e scrittura DXF e DWG con ACadSharp, conversione dei codici di testo. Il salvataggio conserva tutto ciò che non è stato modificato. |
 | `src/Cad.Rendering` | Vista (mondo ↔ schermo) e scena pronta da disegnare: blocchi esplosi, colori risolti, curve approssimate. |
+| `src/Cad.Plot` | Stampa in scala: posizione sul foglio, PDF vettoriale, SVG, PNG e strisce di pixel per la stampante. |
 | `src/Cad.Editing` | Editor senza interfaccia (testabile): comandi, riga di comando, snap, ortho, selezione, grip. |
 | `src/Cad.App` | Applicazione Avalonia: area di disegno SkiaSharp, riga di comando, pannello layer, apertura e salvataggio. |
 | `tests/*` | Test xUnit per ogni libreria. |
@@ -24,11 +25,16 @@ Stack: C# su .NET 8, Avalonia per l'interfaccia, SkiaSharp per il disegno, ACadS
 dotnet build
 dotnet test
 dotnet run --project src/Cad.App                      # apre samples/demo.dxf
-dotnet run --project src/Cad.App -- C:\disegni\tavola.dxf
-dotnet run --project tools/Cad.DxfCheck -- C:\disegni   # prova tutti i DXF di una cartella
+dotnet run --project src/Cad.App -- C:\disegni\tavola.dxf C:\disegni\pianta.dwg
+dotnet run --project tools/Cad.DxfCheck -- C:\disegni   # prova tutti i DXF e DWG di una cartella
 ```
 
 ## Stato
+
+Fase 4 (DWG e stampa): si aprono e si salvano i DWG (dalla R14 al 2018), più disegni aperti insieme in schede, e
+STAMPA porta il foglio in scala su PDF vettoriale, SVG, PNG o sulla stampante di Windows, con l'anteprima.
+Un disegno nuovo o un DXF salvato come DWG diventa un DWG 2000, letto da qualunque CAD; un DWG aperto resta nella sua
+versione. I DWG di CAD2D sono verificati rileggendoli e con LibreDWG; `samples/tavola.dwg` serve per provarli in DraftSight.
 
 Fase 3.7 (scala del disegno e immagini): SCALADISEGNO assegna una scala (1:50, 2:1...) lasciando misure e quote
 come sono, oppure ridimensiona il disegno dalla scala corrente mantenendo nelle quote le misure reali. IMMAGINE
@@ -158,7 +164,10 @@ Layer ne è la versione compatta. LWT nella barra di stato mostra gli spessori.
 
 | Comando | Alias | |
 | --- | --- | --- |
-| SALVA, SALVACOME, APRI, NUOVO | Ctrl+S, Ctrl+Maiusc+S, Ctrl+O, Ctrl+N | chiede conferma se ci sono modifiche |
+| SALVA, SALVACOME, APRI, NUOVO | Ctrl+S, Ctrl+Maiusc+S, Ctrl+O, Ctrl+N | DXF o DWG; APRI accetta più file, ognuno in una scheda |
+| CHIUDI | CLOSE, Ctrl+F4 | chiude la scheda, chiede conferma se ci sono modifiche |
+| STAMPA | PLOT, PRINT, Ctrl+P | foglio, orientamento, area (estensioni, vista, finestra), scala o adatta, bianco e nero, spessori |
+| ESPORTAPDF | EXPORTPDF, PDF | come STAMPA, con il PDF già scelto |
 | ZOOM | Z | finestra o estensioni (Invio) |
 
 Punti: clic, oppure `x,y`, `@dx,dy` (relativo), `d<angolo` e `@d<angolo` (polare, gradi), oppure solo un numero per
@@ -175,6 +184,9 @@ Selezione: clic su un'entità, oppure finestra con due clic (da sinistra a destr
 da destra a sinistra anche quelle intersecate); Maiusc+clic toglie; un secondo clic nello stesso punto passa
 all'oggetto sovrapposto successivo; Ctrl+A seleziona tutto. Sulle entità selezionate compaiono i grip:
 un clic su un grip lo sposta (anche i punti delle quote).
+
+Schede: Ctrl+Tab e Ctrl+Maiusc+Tab passano da un disegno all'altro, clic centrale o × chiude. Ogni scheda ricorda
+la sua vista, la selezione, l'annulla e le ultime impostazioni di stampa.
 
 Vista: rotella per lo zoom attorno al cursore, tasto centrale trascinato per il pan, doppio clic centrale per lo zoom estensioni.
 

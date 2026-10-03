@@ -47,6 +47,10 @@
         <MenuItem Header="_Apri..." InputGesture="Ctrl+O" Click="OnMenuCommand" Tag="APRI" />
         <MenuItem Header="_Salva" InputGesture="Ctrl+S" Click="OnMenuCommand" Tag="SALVA" />
         <MenuItem Header="Salva _con nome..." InputGesture="Ctrl+Shift+S" Click="OnMenuCommand" Tag="SALVACOME" />
+        <MenuItem Header="C_hiudi" InputGesture="Ctrl+F4" Click="OnMenuCommand" Tag="CHIUDI" />
+        <Separator />
+        <MenuItem Header="Stam_pa..." InputGesture="Ctrl+P" Click="OnMenuCommand" Tag="STAMPA" />
+        <MenuItem Header="Esporta _PDF..." Click="OnMenuCommand" Tag="ESPORTAPDF" />
         <Separator />
         <MenuItem Header="_Esci" Click="OnExitClick" />
       </MenuItem>
@@ -187,10 +191,16 @@
       </DockPanel>
     </Border>
 
-    <Grid x:Name="WorkArea" ColumnDefinitions="*,Auto,300">
-      <controls:CadCanvas x:Name="Canvas" Grid.Column="0" />
+    <Grid x:Name="WorkArea" ColumnDefinitions="*,Auto,300" RowDefinitions="Auto,*">
+      <!-- Schede dei disegni aperti. -->
+      <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource Cad.Chrome}" BorderBrush="{DynamicResource Cad.Border}" BorderThickness="0,0,0,1">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+          <StackPanel x:Name="DocumentTabBar" Orientation="Horizontal" />
+        </ScrollViewer>
+      </Border>
+      <controls:CadCanvas x:Name="Canvas" Grid.Row="1" Grid.Column="0" />
       <!-- Inserimento rapido: segue il cursore e mostra richiesta, testo scritto, distanza e angolo. -->
-      <Canvas x:Name="QuickInputLayer" Grid.Column="0" IsHitTestVisible="False" ClipToBounds="True">
+      <Canvas x:Name="QuickInputLayer" Grid.Row="1" Grid.Column="0" IsHitTestVisible="False" ClipToBounds="True">
         <Border x:Name="QuickInputBox" IsVisible="False" Background="{DynamicResource Cad.Tooltip}" BorderBrush="#4FA3FF" BorderThickness="1" CornerRadius="2" Padding="6,3">
           <StackPanel Spacing="2">
             <TextBlock x:Name="QuickPrompt" FontSize="11.5" Foreground="{DynamicResource Cad.Text1}" />
@@ -205,9 +215,9 @@
           </StackPanel>
         </Border>
       </Canvas>
-      <GridSplitter x:Name="PaletteSplitter" Grid.Column="1" Width="4" Background="{DynamicResource Cad.Border}" ResizeDirection="Columns" />
+      <GridSplitter x:Name="PaletteSplitter" Grid.RowSpan="2" Grid.Column="1" Width="4" Background="{DynamicResource Cad.Border}" ResizeDirection="Columns" />
       <!-- Palette a destra, come in DraftSight: Proprietà e Layer. -->
-      <DockPanel x:Name="PalettePanel" Grid.Column="2" Background="{DynamicResource Cad.Panel}">
+      <DockPanel x:Name="PalettePanel" Grid.RowSpan="2" Grid.Column="2" Background="{DynamicResource Cad.Panel}">
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Background="{DynamicResource Cad.Ribbon}">
           <TabStrip x:Name="PaletteTabs" Grid.Column="0" FontSize="12.5">
             <TabStripItem Content="Proprietà" />

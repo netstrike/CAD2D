@@ -101,6 +101,13 @@ public sealed class CadCanvas : Control
         OnViewChanged();
     }
 
+    /// <summary>Torna a una vista salvata.</summary>
+    public void RestoreView(Vector2 center, double scale)
+    {
+        View.SetView(center, scale);
+        OnViewChanged();
+    }
+
     public void ZoomWindow(Vector2 a, Vector2 b)
     {
         View.ZoomExtents(BoundingBox.FromPoints(a, b));
