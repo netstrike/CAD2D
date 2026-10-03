@@ -24,17 +24,22 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
     private const float SnapMarkerPixels = 6;
     private const float PickBoxPixels = 4;
 
-    private static readonly SKColor Background = new(0x21, 0x21, 0x21);
     private static readonly SKColor AxisXColor = new(0xC8, 0x3C, 0x3C);
     private static readonly SKColor AxisYColor = new(0x3C, 0xB4, 0x3C);
     private static readonly SKColor HighlightColor = new(0x4F, 0xA3, 0xFF);
     private static readonly SKColor GripColor = new(0x2F, 0x6F, 0xFF);
     private static readonly SKColor SnapColor = new(0xFF, 0xC0, 0x20);
+    /// <summary>Pixel per millimetro di spessore quando gli spessori sono visibili.</summary>
+    private const double LineweightPixelsPerMm = 4;
+
     private static readonly SKColor TrackingColor = new(0x60, 0xD0, 0x60);
-    private static readonly SKColor CrosshairColor = new(0xC8, 0xC8, 0xC8);
     private static readonly SKTypeface TextTypeface = SKTypeface.FromFamilyName("Arial") ?? SKTypeface.Default;
     private static readonly SKTypeface LabelTypeface = SKTypeface.FromFamilyName("Segoe UI") ?? TextTypeface;
     private static readonly float CapHeightRatio = MeasureCapHeightRatio();
+
+    private bool Light => geometry.Light;
+    private SKColor Background => Light ? SKColors.White : new SKColor(0x21, 0x21, 0x21);
+    private SKColor CrosshairColor => Light ? new SKColor(0x30, 0x30, 0x30) : new SKColor(0xC8, 0xC8, 0xC8);
 
     public Rect Bounds => bounds;
 
@@ -89,11 +94,15 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
             }
         }
 
-        // StrokeWidth 0 = linea sottile di un pixel a qualunque livello di zoom.
-        using var paint = new SKPaint { StrokeWidth = 0, Style = SKPaintStyle.Stroke, IsAntialias = true };
-        foreach (var (color, path) in geometry.Paths)
+        // StrokeWidth 0 = linea sottile di un pixel a qualunque livello di zoom. Con gli spessori visibili (LWT) lo
+        // spessore è in pixel dello schermo, come in DraftSight: fino a 0,25 mm resta un pixel.
+        var scale = Math.Sqrt(Math.Abs(m.Determinant));
+        using var paint = new SKPaint { StrokeWidth = 0, Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
+        foreach (var (color, path, weight) in geometry.Paths)
         {
             paint.Color = color;
+            var pixels = overlay.ShowLineweights && weight > 0.25 ? weight * LineweightPixelsPerMm : 0;
+            paint.StrokeWidth = pixels > 1 && scale > 0 ? (float)(pixels / scale) : 0;
             canvas.DrawPath(path, paint);
         }
 
@@ -111,7 +120,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
             }
 
             var p = worldToScreen.Transform(point.Position);
-            paint.Color = SceneGeometry.ToSkColor(point.Color);
+            paint.Color = SceneGeometry.ToSkColor(point.Color, Light);
             canvas.DrawLine((float)p.X - PointMarkerPixels, (float)p.Y, (float)p.X + PointMarkerPixels, (float)p.Y, paint);
             canvas.DrawLine((float)p.X, (float)p.Y - PointMarkerPixels, (float)p.X, (float)p.Y + PointMarkerPixels, paint);
         }
@@ -130,7 +139,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
             }
 
             var p = worldToScreen.Transform(text.Position);
-            paint.Color = SceneGeometry.ToSkColor(text.Color);
+            paint.Color = SceneGeometry.ToSkColor(text.Color, Light);
             paint.TextSize = (float)(pixels / CapHeightRatio);
             paint.TextAlign = text.Alignment switch
             {
@@ -176,7 +185,7 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
 
         foreach (var (color, points) in overlay.Preview)
         {
-            stroke.Color = SceneGeometry.ToSkColor(color);
+            stroke.Color = SceneGeometry.ToSkColor(color, Light);
             DrawPolylines(canvas, [points], stroke);
         }
 
@@ -361,8 +370,8 @@ internal sealed class SceneDrawOperation(Rect bounds, SceneGeometry geometry, Ov
             return;
         }
 
-        using var minor = new SKPaint { Style = SKPaintStyle.Fill, Color = new SKColor(0x5A, 0x5A, 0x5A) };
-        using var major = new SKPaint { Style = SKPaintStyle.Fill, Color = new SKColor(0x80, 0x80, 0x80) };
+        using var minor = new SKPaint { Style = SKPaintStyle.Fill, Color = Light ? new SKColor(0xC0, 0xC0, 0xC0) : new SKColor(0x5A, 0x5A, 0x5A) };
+        using var major = new SKPaint { Style = SKPaintStyle.Fill, Color = Light ? new SKColor(0x90, 0x90, 0x90) : new SKColor(0x80, 0x80, 0x80) };
         for (var i = x0; i <= x1; i++)
         {
             for (var j = y0; j <= y1; j++)

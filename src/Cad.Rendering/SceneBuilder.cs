@@ -17,7 +17,7 @@ public static class SceneBuilder
     public static Scene Build(CadDocument document)
     {
         var builder = new Builder { LinetypeScale = document.LinetypeScale };
-        var root = new Context(Matrix2D.Identity, null, CadColor.White, Linetype.Continuous, 0);
+        var root = new Context(Matrix2D.Identity, null, CadColor.White, Linetype.Continuous, 0, LineWeight.DefaultValue);
         foreach (var entity in document.ModelSpace)
         {
             builder.Add(entity, root);
@@ -34,7 +34,7 @@ public static class SceneBuilder
     {
         // Anteprime ed evidenziazione: linee continue, i tratteggi bastano come contorno.
         var builder = new Builder { ColorOverride = color, IgnoreVisibility = true, IgnoreLinetypes = true, HatchOutlinesOnly = color is not null };
-        var root = new Context(Matrix2D.Identity, null, CadColor.White, Linetype.Continuous, 0);
+        var root = new Context(Matrix2D.Identity, null, CadColor.White, Linetype.Continuous, 0, LineWeight.DefaultValue);
         foreach (var entity in entities)
         {
             builder.Add(entity, root);
@@ -44,11 +44,14 @@ public static class SceneBuilder
     }
 
     /// <summary>Stato ereditato da un inserimento di blocco verso le entità che contiene.</summary>
-    private readonly record struct Context(Matrix2D Transform, Layer? InsertLayer, CadColor InsertColor, Linetype InsertLinetype, int Depth);
+    private readonly record struct Context(Matrix2D Transform, Layer? InsertLayer, CadColor InsertColor, Linetype InsertLinetype, int Depth, int InsertWeight);
 
     private sealed class Builder
     {
-        public Dictionary<CadColor, RenderBatch> Batches { get; } = [];
+        public Dictionary<(CadColor, int), RenderBatch> Batches { get; } = [];
+
+        /// <summary>Spessore (centesimi di mm, già risolto) dell'entità che si sta aggiungendo.</summary>
+        private int _weight = LineWeight.DefaultValue;
         public List<RenderText> Texts { get; } = [];
         public List<RenderPoint> Points { get; } = [];
         public int EntityCount { get; private set; }
@@ -82,6 +85,14 @@ public static class SceneBuilder
             var linetype = entity.Linetype is null ? layer.Linetype
                 : ReferenceEquals(entity.Linetype, Linetype.ByBlock) ? context.InsertLinetype
                 : entity.Linetype;
+
+            var weight = entity.LineWeight switch
+            {
+                LineWeight.ByLayer => layer.LineWeight,
+                LineWeight.ByBlock => context.InsertWeight,
+                var w => w,
+            };
+            _weight = weight < 0 ? LineWeight.DefaultValue : weight;
 
             if (entity is InsertEntity insert)
             {
@@ -143,14 +154,15 @@ public static class SceneBuilder
                 return;
             }
 
-            var inner = new Context(insert.Transform * context.Transform, layer, color, linetype, context.Depth + 1);
+            var weight = _weight;
+            var inner = new Context(insert.Transform * context.Transform, layer, color, linetype, context.Depth + 1, weight);
             foreach (var child in insert.Block.Entities)
             {
                 Add(child, inner);
             }
 
             // Gli attributi sono già in coordinate del contenitore dell'inserimento.
-            var attributes = context with { InsertLayer = layer, InsertColor = color, InsertLinetype = linetype, Depth = context.Depth + 1 };
+            var attributes = context with { InsertLayer = layer, InsertColor = color, InsertLinetype = linetype, Depth = context.Depth + 1, InsertWeight = weight };
             foreach (var attribute in insert.Attributes)
             {
                 Add(attribute, attributes);
@@ -167,7 +179,7 @@ public static class SceneBuilder
 
             if (dimension.Graphics is { } graphics)
             {
-                var inner = new Context(dimension.GraphicsTransform * context.Transform, layer, color, Linetype.Continuous, context.Depth + 1);
+                var inner = new Context(dimension.GraphicsTransform * context.Transform, layer, color, Linetype.Continuous, context.Depth + 1, _weight);
                 foreach (var child in graphics.Entities)
                 {
                     Add(child, inner);
@@ -176,7 +188,7 @@ public static class SceneBuilder
                 return;
             }
 
-            var generated = new Context(context.Transform, layer, color, Linetype.Continuous, context.Depth + 1);
+            var generated = new Context(context.Transform, layer, color, Linetype.Continuous, context.Depth + 1, _weight);
             foreach (var part in dimension.Explode())
             {
                 Add(part, generated);
@@ -248,10 +260,10 @@ public static class SceneBuilder
                 return;
             }
 
-            if (!Batches.TryGetValue(color, out var batch))
+            if (!Batches.TryGetValue((color, _weight), out var batch))
             {
-                batch = new RenderBatch(color);
-                Batches.Add(color, batch);
+                batch = new RenderBatch(color, _weight / 100.0);
+                Batches.Add((color, _weight), batch);
             }
 
             batch.Polylines.Add(points);

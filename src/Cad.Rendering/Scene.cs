@@ -3,10 +3,13 @@ using Cad.Geometry;
 
 namespace Cad.Rendering;
 
-/// <summary>Spezzate dello stesso colore, in coordinate mondo: si disegnano con una sola chiamata.</summary>
-public sealed class RenderBatch(CadColor color)
+/// <summary>Spezzate dello stesso colore e spessore, in coordinate mondo: si disegnano con una sola chiamata.</summary>
+public sealed class RenderBatch(CadColor color, double weight = LineWeight.DefaultValue / 100.0)
 {
     public CadColor Color { get; } = color;
+
+    /// <summary>Spessore di linea in millimetri.</summary>
+    public double Weight { get; } = weight;
     public List<Vector2[]> Polylines { get; } = [];
 }
 

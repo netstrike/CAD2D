@@ -203,3 +203,51 @@ public class DraftingAidTests
         Assert.True(_editor.GridVisible);
     }
 }
+
+public class MeasureCommandTests
+{
+    private readonly CadDocument _document = new();
+    private readonly Editor _editor;
+    private readonly List<string> _messages = [];
+
+    public MeasureCommandTests()
+    {
+        _editor = new Editor(_document) { SnapEnabled = false, PolarEnabled = false };
+        _editor.Message += _messages.Add;
+    }
+
+    [Fact]
+    public void Distance_reports_length_angle_and_deltas()
+    {
+        _editor.RunCommand("DISTANZA");
+        _editor.SubmitText("0,0");
+        _editor.SubmitText("3,4");
+        Assert.Contains("Distanza = 5, Angolo = 53.1301°, Delta X = 3, Delta Y = 4", _messages);
+    }
+
+    [Fact]
+    public void Area_by_points_and_of_a_circle()
+    {
+        _editor.RunCommand("AREA");
+        foreach (var point in new[] { "0,0", "10,0", "10,5", "0,5", "" })
+        {
+            _editor.SubmitText(point);
+        }
+
+        Assert.Contains("Area = 50, Perimetro = 30", _messages);
+
+        _document.Edit("test", e => e.Add(new CircleEntity(_document.GetOrAddLayer("0"), Vector2.Zero, 1)));
+        _editor.RunCommand("AREA");
+        _editor.SubmitText("O");
+        _editor.Click(new Vector2(1, 0), 0.1);
+        Assert.Contains("Area = 3.1416, Circonferenza = 6.2832", _messages);
+    }
+
+    [Fact]
+    public void Id_reports_coordinates()
+    {
+        _editor.RunCommand("ID");
+        _editor.SubmitText("12.5,-3");
+        Assert.Contains("X = 12.5  Y = -3", _messages);
+    }
+}

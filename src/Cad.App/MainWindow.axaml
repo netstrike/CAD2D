@@ -12,11 +12,11 @@
       <Setter Property="FontSize" Value="11" />
       <Setter Property="MinHeight" Value="20" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="#808080" />
+      <Setter Property="Foreground" Value="{DynamicResource Cad.Subtle}" />
     </Style>
     <Style Selector="ToggleButton.status:checked /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#1E5A8A" />
-      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Background" Value="{DynamicResource Cad.StatusOn}" />
+      <Setter Property="Foreground" Value="{DynamicResource Cad.StatusOnText}" />
     </Style>
     <Style Selector="TabStrip#PaletteTabs > TabStripItem">
       <Setter Property="FontSize" Value="13" />
@@ -30,10 +30,10 @@
   </Window.Styles>
   <DockPanel>
     <!-- Riga in alto: barra di accesso rapido e menu classico. -->
-    <Border DockPanel.Dock="Top" Background="#1C1C1C">
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Cad.Chrome}">
       <StackPanel Orientation="Horizontal">
         <StackPanel x:Name="QuickAccess" Orientation="Horizontal" Margin="6,0,10,0" Spacing="1" VerticalAlignment="Center" />
-        <Border Width="1" Background="#3C3C3C" Margin="0,6" />
+        <Border Width="1" Background="{DynamicResource Cad.Border}" Margin="0,6" />
     <Menu>
       <MenuItem Header="_File">
         <MenuItem Header="_Nuovo" InputGesture="Ctrl+N" Click="OnMenuCommand" Tag="NUOVO" />
@@ -69,7 +69,7 @@
         <MenuItem Header="_Arco" Click="OnMenuCommand" Tag="ARCO" />
         <MenuItem Header="_Rettangolo" Click="OnMenuCommand" Tag="RETTANGOLO" />
         <Separator />
-        <MenuItem Header="_Tratteggio" Click="OnMenuCommand" Tag="TRATTEGGIO" />
+        <MenuItem Header="_Tratteggio..." Click="OnMenuCommand" Tag="DLGTRATTEGGIO" />
         <Separator />
         <MenuItem Header="Crea _blocco" Click="OnMenuCommand" Tag="BLOCCO" />
         <MenuItem Header="_Inserisci blocco" Click="OnMenuCommand" Tag="INSERISCI" />
@@ -86,28 +86,39 @@
         <MenuItem Header="_Diametro" Click="OnMenuCommand" Tag="QDIAMETRO" />
         <MenuItem Header="A_ngolare" Click="OnMenuCommand" Tag="QANGOLARE" />
         <Separator />
-        <MenuItem Header="_Stile di quota" Click="OnMenuCommand" Tag="STILEQUOTA" />
+        <MenuItem Header="_Stile di quota..." Click="OnMenuCommand" Tag="DLGSTILEQUOTA" />
       </MenuItem>
       <MenuItem x:Name="SnapMenu" Header="_Snap" />
       <MenuItem Header="_Vista">
-        <MenuItem Header="Zoom _estensioni" Click="OnZoomExtentsClick" />
+        <MenuItem Header="Zoom _estensioni" Click="OnMenuCommand" Tag="ZOOMESTENSIONI" />
         <MenuItem Header="Zoom _finestra" Click="OnMenuCommand" Tag="ZOOM" />
         <Separator />
         <MenuItem Header="Palette _Proprietà" Click="OnMenuCommand" Tag="PROPRIETA" />
         <MenuItem Header="Palette _Layer" Click="OnMenuCommand" Tag="PALETTELAYER" />
+        <MenuItem Header="_Gestore layer..." Click="OnMenuCommand" Tag="GESTORELAYER" />
+        <Separator />
+        <MenuItem Header="_Tema chiaro/scuro" Click="OnMenuCommand" Tag="TEMA" />
+      </MenuItem>
+      <MenuItem Header="St_rumenti">
+        <MenuItem Header="_Distanza" Click="OnMenuCommand" Tag="DISTANZA" />
+        <MenuItem Header="_Area" Click="OnMenuCommand" Tag="AREA" />
+        <MenuItem Header="_Coordinate (ID)" Click="OnMenuCommand" Tag="ID" />
+        <Separator />
+        <MenuItem Header="_Griglia..." Click="OnMenuCommand" Tag="GRIGLIA" />
+        <MenuItem Header="_Opzioni..." Click="OnMenuCommand" Tag="OPZIONI" />
       </MenuItem>
     </Menu>
       </StackPanel>
     </Border>
 
-    <controls:Ribbon x:Name="RibbonBar" DockPanel.Dock="Top" Background="#232323" Padding="0" />
+    <controls:Ribbon x:Name="RibbonBar" DockPanel.Dock="Top" Background="{DynamicResource Cad.Ribbon}" Padding="0" />
 
     <!-- Barra di stato: messaggi, selezione, interruttori degli aiuti al disegno, coordinate. -->
-    <Border DockPanel.Dock="Bottom" Background="#1C1C1C" BorderBrush="#3C3C3C" BorderThickness="0,1,0,0" Padding="8,2">
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Cad.Chrome}" BorderBrush="{DynamicResource Cad.Border}" BorderThickness="0,1,0,0" Padding="8,2">
       <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
-        <TextBlock x:Name="StatusText" Grid.Column="0" Foreground="#A0A0A0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="11.5" />
-        <TextBlock x:Name="SelectionText" Grid.Column="1" Margin="16,0" Foreground="#A0A0A0" VerticalAlignment="Center" FontSize="11.5" />
-        <TextBlock x:Name="ScaleText" Grid.Column="2" Margin="0,0,16,0" Foreground="#808080" VerticalAlignment="Center" FontSize="11.5" />
+        <TextBlock x:Name="StatusText" Grid.Column="0" Foreground="{DynamicResource Cad.Text2}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="11.5" />
+        <TextBlock x:Name="SelectionText" Grid.Column="1" Margin="16,0" Foreground="{DynamicResource Cad.Text2}" VerticalAlignment="Center" FontSize="11.5" />
+        <TextBlock x:Name="ScaleText" Grid.Column="2" Margin="0,0,16,0" Foreground="{DynamicResource Cad.Subtle}" VerticalAlignment="Center" FontSize="11.5" />
         <StackPanel x:Name="ToggleBar" Grid.Column="3" Orientation="Horizontal" Spacing="2" Margin="0,0,16,0">
           <ToggleButton x:Name="GridSnapToggle" Classes="status" Content="AGGANCIO" ToolTip.Tip="Aggancio ai punti della griglia (F9)" />
           <ToggleButton x:Name="GridToggle" Classes="status" Content="GRIGLIA" ToolTip.Tip="Mostra la griglia (F7). Il passo si cambia con GRIGLIA." />
@@ -115,6 +126,7 @@
           <ToggleButton x:Name="PolarToggle" Classes="status" Content="POLARE" IsChecked="True" ToolTip.Tip="Tracciamento polare (F10). Tasto destro: incremento angolare." />
           <ToggleButton x:Name="SnapToggle" Classes="status" Content="ESNAP" IsChecked="True" ToolTip.Tip="Snap agli oggetti (F3). Tasto destro: tipi di snap." />
           <ToggleButton x:Name="TrackToggle" Classes="status" Content="ETRACK" IsChecked="True" ToolTip.Tip="Tracciamento di allineamento (F11): fermati un attimo su uno snap per acquisirlo." />
+          <ToggleButton x:Name="LineweightToggle" Classes="status" Content="LWT" ToolTip.Tip="Mostra gli spessori di linea" />
           <ToggleButton x:Name="QuickInputToggle" Classes="status" Content="QINPUT" IsChecked="True" ToolTip.Tip="Inserimento rapido vicino al cursore (F12). Tab blocca distanza e angolo." />
         </StackPanel>
         <TextBlock x:Name="CoordinatesText" Grid.Column="4" FontFamily="Consolas,monospace" VerticalAlignment="Center" MinWidth="190" TextAlignment="Right" FontSize="12" />
@@ -122,7 +134,7 @@
     </Border>
 
     <!-- Riga di comando: storico in alto, prompt e casella di testo in basso. -->
-    <Border DockPanel.Dock="Bottom" Background="#262626" BorderBrush="#3C3C3C" BorderThickness="0,1,0,0">
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Cad.CommandLine}" BorderBrush="{DynamicResource Cad.Border}" BorderThickness="0,1,0,0">
       <DockPanel>
         <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*" Margin="6,2,6,4">
           <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
@@ -132,13 +144,13 @@
           </StackPanel>
           <TextBox x:Name="CommandBox" Grid.Column="1" FontFamily="Consolas,monospace" MinHeight="26" Padding="4,2" />
           <Popup x:Name="CompletionPopup" Grid.Column="1" PlacementTarget="{Binding #CommandBox}" Placement="TopEdgeAlignedLeft" IsLightDismissEnabled="False">
-            <Border Background="#2B2B2B" BorderBrush="#4F4F4F" BorderThickness="1" MinWidth="260">
+            <Border Background="{DynamicResource Cad.Panel}" BorderBrush="{DynamicResource Cad.BorderStrong}" BorderThickness="1" MinWidth="260">
               <ListBox x:Name="CompletionList" MaxHeight="220" FontFamily="Consolas,monospace" FontSize="12" Background="Transparent" />
             </Border>
           </Popup>
         </Grid>
         <ScrollViewer x:Name="HistoryScroll" Height="72" Margin="6,4,6,0">
-          <SelectableTextBlock x:Name="HistoryText" FontFamily="Consolas,monospace" Foreground="#A0A0A0" TextWrapping="Wrap" />
+          <SelectableTextBlock x:Name="HistoryText" FontFamily="Consolas,monospace" Foreground="{DynamicResource Cad.Text2}" TextWrapping="Wrap" />
         </ScrollViewer>
       </DockPanel>
     </Border>
@@ -147,24 +159,24 @@
       <controls:CadCanvas x:Name="Canvas" Grid.Column="0" />
       <!-- Inserimento rapido: segue il cursore e mostra richiesta, testo scritto, distanza e angolo. -->
       <Canvas x:Name="QuickInputLayer" Grid.Column="0" IsHitTestVisible="False" ClipToBounds="True">
-        <Border x:Name="QuickInputBox" IsVisible="False" Background="#E6303030" BorderBrush="#4FA3FF" BorderThickness="1" CornerRadius="2" Padding="6,3">
+        <Border x:Name="QuickInputBox" IsVisible="False" Background="{DynamicResource Cad.Tooltip}" BorderBrush="#4FA3FF" BorderThickness="1" CornerRadius="2" Padding="6,3">
           <StackPanel Spacing="2">
-            <TextBlock x:Name="QuickPrompt" FontSize="11.5" Foreground="#D0D0D0" />
+            <TextBlock x:Name="QuickPrompt" FontSize="11.5" Foreground="{DynamicResource Cad.Text1}" />
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <Border x:Name="QuickFirstBox" Background="#1E1E1E" BorderBrush="#5A5A5A" BorderThickness="1" Padding="4,1" MinWidth="70">
+              <Border x:Name="QuickFirstBox" Background="{DynamicResource Cad.Field}" BorderBrush="{DynamicResource Cad.FieldBorder}" BorderThickness="1" Padding="4,1" MinWidth="70">
                 <TextBlock x:Name="QuickFirst" FontFamily="Consolas,monospace" FontSize="12" />
               </Border>
-              <Border x:Name="QuickSecondBox" Background="#1E1E1E" BorderBrush="#5A5A5A" BorderThickness="1" Padding="4,1" MinWidth="60">
+              <Border x:Name="QuickSecondBox" Background="{DynamicResource Cad.Field}" BorderBrush="{DynamicResource Cad.FieldBorder}" BorderThickness="1" Padding="4,1" MinWidth="60">
                 <TextBlock x:Name="QuickSecond" FontFamily="Consolas,monospace" FontSize="12" />
               </Border>
             </StackPanel>
           </StackPanel>
         </Border>
       </Canvas>
-      <GridSplitter x:Name="PaletteSplitter" Grid.Column="1" Width="4" Background="#3C3C3C" ResizeDirection="Columns" />
+      <GridSplitter x:Name="PaletteSplitter" Grid.Column="1" Width="4" Background="{DynamicResource Cad.Border}" ResizeDirection="Columns" />
       <!-- Palette a destra, come in DraftSight: Proprietà e Layer. -->
-      <DockPanel x:Name="PalettePanel" Grid.Column="2" Background="#2B2B2B">
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Background="#232323">
+      <DockPanel x:Name="PalettePanel" Grid.Column="2" Background="{DynamicResource Cad.Panel}">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Background="{DynamicResource Cad.Ribbon}">
           <TabStrip x:Name="PaletteTabs" Grid.Column="0" FontSize="12.5">
             <TabStripItem Content="Proprietà" />
             <TabStripItem Content="Layer" />
@@ -175,18 +187,19 @@
           <controls:PropertiesPalette x:Name="PropertiesPanel" />
           <Panel x:Name="LayerPalette" IsVisible="False">
             <DockPanel>
-              <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="10,6,6,0">
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="10,6,6,0">
                 <TextBlock Text="Layer" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="+" ToolTip.Tip="Nuovo layer" Click="OnNewLayerClick" Padding="8,0" Margin="2,0" />
                 <Button Grid.Column="2" Content="Rinomina" ToolTip.Tip="Rinomina il layer evidenziato" Click="OnRenameLayerClick" Padding="6,0" Margin="2,0" FontSize="11" />
                 <Button Grid.Column="3" Content="Elimina" ToolTip.Tip="Elimina il layer evidenziato (se vuoto)" Click="OnDeleteLayerClick" Padding="6,0" Margin="2,0" FontSize="11" />
+                <Button Grid.Column="4" Content="Gestore…" ToolTip.Tip="Gestore layer con tutte le proprietà" Click="OnMenuCommand" Tag="GESTORELAYER" Padding="6,0" Margin="2,0" FontSize="11" />
               </Grid>
-              <TextBlock DockPanel.Dock="Top" Text="Doppio clic sul nome: layer corrente. Clic su colore o tipo di linea per cambiarli." Foreground="#808080" FontSize="11" Margin="10,4,10,4" TextWrapping="Wrap" />
+              <TextBlock DockPanel.Dock="Top" Text="Doppio clic sul nome: layer corrente. Clic su colore o tipo di linea per cambiarli." Foreground="{DynamicResource Cad.Subtle}" FontSize="11" Margin="10,4,10,4" TextWrapping="Wrap" />
               <Grid DockPanel.Dock="Top" ColumnDefinitions="28,28,28,22,*" Margin="8,0,8,2">
-                <TextBlock Grid.Column="0" Text="Acc" FontSize="10" Foreground="#808080" ToolTip.Tip="Acceso/spento" />
-                <TextBlock Grid.Column="1" Text="Gelo" FontSize="10" Foreground="#808080" ToolTip.Tip="Congelato" />
-                <TextBlock Grid.Column="2" Text="Blocc" FontSize="9" Foreground="#808080" ToolTip.Tip="Bloccato" />
-                <TextBlock Grid.Column="4" Text="Nome · tipo di linea" FontSize="10" Foreground="#808080" Margin="4,0" />
+                <TextBlock Grid.Column="0" Text="Acc" FontSize="10" Foreground="{DynamicResource Cad.Subtle}" ToolTip.Tip="Acceso/spento" />
+                <TextBlock Grid.Column="1" Text="Gelo" FontSize="10" Foreground="{DynamicResource Cad.Subtle}" ToolTip.Tip="Congelato" />
+                <TextBlock Grid.Column="2" Text="Blocc" FontSize="9" Foreground="{DynamicResource Cad.Subtle}" ToolTip.Tip="Bloccato" />
+                <TextBlock Grid.Column="4" Text="Nome · tipo di linea" FontSize="10" Foreground="{DynamicResource Cad.Subtle}" Margin="4,0" />
               </Grid>
               <ListBox x:Name="LayerList" Background="Transparent" SelectionMode="Single">
                 <ListBox.Styles>
@@ -202,12 +215,12 @@
                       <CheckBox Grid.Column="2" IsChecked="{Binding IsLocked}" MinWidth="0" Padding="0" ToolTip.Tip="Bloccato: si vede ma non si modifica" />
                       <Button Grid.Column="3" Padding="0" Width="16" Height="16" Background="Transparent" BorderThickness="0" VerticalAlignment="Center"
                               ToolTip.Tip="Colore del layer" Click="OnLayerColorClick" Tag="{Binding}">
-                        <Rectangle Width="12" Height="12" Fill="{Binding ColorBrush}" Stroke="#808080" StrokeThickness="1" />
+                        <Rectangle Width="12" Height="12" Fill="{Binding ColorBrush}" Stroke="{DynamicResource Cad.Subtle}" StrokeThickness="1" />
                       </Button>
                       <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" Margin="4,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}" FontWeight="{Binding NameWeight}" />
                         <Button Padding="2,0" Background="Transparent" BorderThickness="0" ToolTip.Tip="Tipo di linea del layer" Click="OnLayerLinetypeClick" Tag="{Binding}">
-                          <TextBlock Text="{Binding Details}" Foreground="#808080" FontSize="11" />
+                          <TextBlock Text="{Binding Details}" Foreground="{DynamicResource Cad.Subtle}" FontSize="11" />
                         </Button>
                       </StackPanel>
                     </Grid>

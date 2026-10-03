@@ -11,7 +11,6 @@ namespace Cad.App.Controls;
 /// </summary>
 public static class Icons
 {
-    public static readonly IBrush BaseBrush = new SolidColorBrush(Color.FromRgb(0xC8, 0xC8, 0xC8));
     public static readonly IBrush AccentBrush = new SolidColorBrush(Color.FromRgb(0x4F, 0xA3, 0xFF));
 
     private const string Circle = "M20,12 A8,8 0 1 1 4,12 A8,8 0 1 1 20,12";
@@ -71,6 +70,7 @@ public static class Icons
         ["TAGLIACLIP"] = ("M6,18 A3,3 0 1 0 6,18.01 M18,18 A3,3 0 1 0 18,18.01", "M8,16 L18,3 M16,16 L6,3"),
         ["COPIABASE"] = ("M3,9h11v12h-11z M9,3h12v12h-12z", "M3,21 m-2,0 h4 M3,19v4"),
         ["POLARE"] = ("M3,20h18 M3,20 A16,16 0 0 1 19,4", "M3,20 L15,8 M3,20 L19,14"),
+        ["ID"] = ("M4,20 L20,20 M4,20 L4,4", "M14,10 m-3,0 h6 M14,7 v6"),
         ["TEMA"] = ("M12,3 A9,9 0 1 0 12,21z", "M12,3 A9,9 0 0 1 12,21z"),
     };
 
@@ -86,7 +86,7 @@ public static class Icons
             var thickness = size <= 18 ? 1.8 : 1.4;
             if (paths.Base.Length > 0)
             {
-                canvas.Children.Add(Stroke(paths.Base, BaseBrush, thickness));
+                canvas.Children.Add(Stroke(paths.Base, null, thickness).Themed(Shape.StrokeProperty, "Cad.IconBase"));
             }
 
             canvas.Children.Add(Stroke(paths.Accent, AccentBrush, thickness));
@@ -95,7 +95,7 @@ public static class Icons
         return new Viewbox { Width = size, Height = size, Child = canvas };
     }
 
-    private static Avalonia.Controls.Shapes.Path Stroke(string data, IBrush brush, double thickness) => new()
+    private static Avalonia.Controls.Shapes.Path Stroke(string data, IBrush? brush, double thickness) => new()
     {
         Data = Avalonia.Media.Geometry.Parse(data),
         Stroke = brush,

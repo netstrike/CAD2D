@@ -14,6 +14,9 @@ public sealed class Layer(string name)
     public bool IsLocked { get; set; }
     public Linetype Linetype { get; set; } = Linetype.Continuous;
 
+    /// <summary>Spessore di linea in centesimi di millimetro, o <see cref="Document.LineWeight.Default"/>.</summary>
+    public int LineWeight { get; set; } = Document.LineWeight.Default;
+
     /// <summary>Un layer è disegnato solo se è acceso e non congelato.</summary>
     public bool IsVisible => IsOn && !IsFrozen;
 

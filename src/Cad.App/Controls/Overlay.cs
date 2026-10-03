@@ -29,6 +29,9 @@ internal sealed record Overlay(
     /// <summary>Punti acquisiti per ETrack, segnati con una piccola croce.</summary>
     public IReadOnlyList<Vector2> Acquired { get; init; } = [];
 
+    /// <summary>Spessori di linea visibili (interruttore LWT).</summary>
+    public bool ShowLineweights { get; init; }
+
     /// <summary>Passo della griglia da disegnare; 0 = griglia spenta.</summary>
     public double GridSpacing { get; init; }
 }

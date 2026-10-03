@@ -31,6 +31,7 @@ public partial class MainWindow
         (GridSnapToggle, Key.F9, (ed, on) => ed.GridSnapEnabled = on, "Aggancio alla griglia"),
         (PolarToggle, Key.F10, (ed, on) => ed.PolarEnabled = on, "Tracciamento polare"),
         (TrackToggle, Key.F11, (ed, on) => ed.TrackingEnabled = on, "ETrack"),
+        (LineweightToggle, Key.None, (_, on) => { Canvas.ShowLineweights = on; Canvas.RefreshScene(); }, "Spessori di linea"),
         (QuickInputToggle, Key.F12, (_, _) => { }, "Inserimento rapido"),
     ];
 
@@ -98,7 +99,7 @@ public partial class MainWindow
     {
         foreach (var (toggle, k, _, name) in DraftingToggles)
         {
-            if (k == key)
+            if (k == key && k != Key.None)
             {
                 toggle.IsChecked = toggle.IsChecked != true;
                 AppendHistory($"<{name} {(toggle.IsChecked == true ? "attivo" : "disattivato")}>");
@@ -182,17 +183,15 @@ public partial class MainWindow
     }
 
     private static readonly IBrush ActiveFieldBrush = new SolidColorBrush(Color.FromRgb(0x4F, 0xA3, 0xFF));
-    private static readonly IBrush IdleFieldBrush = new SolidColorBrush(Color.FromRgb(0x5A, 0x5A, 0x5A));
-    private static readonly IBrush LockedFieldBrush = new SolidColorBrush(Color.FromRgb(0x2E, 0x4A, 0x2E));
-    private static readonly IBrush FieldBrush = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
-
-    private static void SetField(Border box, TextBlock text, string value, bool active, bool locked)
+    private void SetField(Border box, TextBlock text, string value, bool active, bool locked)
     {
         box.IsVisible = true;
         text.Text = value;
-        box.BorderBrush = active ? ActiveFieldBrush : IdleFieldBrush;
-        box.Background = locked ? LockedFieldBrush : FieldBrush;
+        box.BorderBrush = active ? ActiveFieldBrush : Brush("Cad.FieldBorder");
+        box.Background = Brush(locked ? "Cad.FieldLocked" : "Cad.Field");
     }
+
+    private IBrush? Brush(string key) => this.TryFindResource(key, ActualThemeVariant, out var value) ? value as IBrush : null;
 
     private static string Format(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
@@ -233,8 +232,7 @@ public partial class MainWindow
                 MinHeight = 20,
                 Focusable = false,
                 Foreground = ActiveFieldBrush,
-                Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
-            };
+            }.Themed(Button.BackgroundProperty, "Cad.Button");
             ToolTip.SetTip(button, $"Opzione {keyword} (oppure scrivi {keyword[..1]})");
             button.Click += (_, _) =>
             {
@@ -277,7 +275,7 @@ public partial class MainWindow
         CompletionPopup.IsOpen = true;
     }
 
-    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER"];
+    private static readonly string[] UiOnlyCommands = ["ZOOMESTENSIONI", "PROPRIETA", "PALETTELAYER", "GESTORELAYER", "OPZIONI", "SELEZIONATUTTO", "TEMA", "DLGTRATTEGGIO", "DLGSTILEQUOTA"];
 
     private void InitializeCompletion()
     {

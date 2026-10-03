@@ -19,7 +19,7 @@ public sealed class LayerItem(Layer layer, bool isCurrent, Action onChanged) : I
 
     public IBrush ColorBrush { get; } = new SolidColorBrush(Color.FromRgb(layer.Color.R, layer.Color.G, layer.Color.B));
 
-    public string Details => layer.Linetype.Name;
+    public string Details => layer.LineWeight == LineWeight.Default ? layer.Linetype.Name : $"{layer.Linetype.Name} · {LineWeight.Format(layer.LineWeight)}";
 
     public bool IsOn
     {

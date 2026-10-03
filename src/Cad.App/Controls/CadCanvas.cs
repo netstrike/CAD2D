@@ -90,7 +90,7 @@ public sealed class CadCanvas : Control
     public void RefreshScene()
     {
         // La geometria precedente non si libera esplicitamente: il thread di rendering potrebbe ancora disegnarla.
-        _geometry = _editor is null ? SceneGeometry.Empty : SceneGeometry.Build(SceneBuilder.Build(_editor.Document));
+        _geometry = _editor is null ? SceneGeometry.Empty : SceneGeometry.Build(SceneBuilder.Build(_editor.Document), LightBackground);
         RefreshOverlay();
         OnViewChanged();
     }
@@ -268,6 +268,12 @@ public sealed class CadCanvas : Control
 
     private void OnEditorStateChanged(object? sender, EventArgs e) => RefreshOverlay();
 
+    /// <summary>Sfondo bianco (tema chiaro): il colore 7 si disegna nero.</summary>
+    public bool LightBackground { get; set; }
+
+    /// <summary>Spessori di linea visibili (LWT).</summary>
+    public bool ShowLineweights { get; set; }
+
     /// <summary>Ridisegna la sovrapposizione dopo un cambio di impostazioni (griglia, tracciamento).</summary>
     public void InvalidateOverlay() => RefreshOverlay();
 
@@ -315,6 +321,7 @@ public sealed class CadCanvas : Control
             TrackingPoint = tracking?.Point,
             Acquired = [.. _editor.AcquiredPoints],
             GridSpacing = _editor.GridVisible ? _editor.GridSpacing : 0,
+            ShowLineweights = ShowLineweights,
         };
         InvalidateVisual();
     }

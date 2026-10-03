@@ -20,9 +20,6 @@ public sealed record RibbonTab(string Title, IReadOnlyList<RibbonPanel> Panels);
 /// </summary>
 public sealed class Ribbon : TabControl
 {
-    private static readonly IBrush PanelBrush = new SolidColorBrush(Color.FromRgb(0x2B, 0x2B, 0x2B));
-    private static readonly IBrush SeparatorBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
-    private static readonly IBrush TitleBrush = new SolidColorBrush(Color.FromRgb(0x96, 0x96, 0x96));
 
     public event EventHandler<string>? CommandRequested;
 
@@ -47,10 +44,9 @@ public sealed class Ribbon : TabControl
                 Padding = new Thickness(12, 3),
                 Content = new Border
                 {
-                    Background = PanelBrush,
                     Height = 98,
                     Child = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = panels },
-                },
+                }.Themed(Border.BackgroundProperty, "Cad.Panel"),
             });
         }
 
@@ -103,20 +99,19 @@ public sealed class Ribbon : TabControl
         {
             Text = panel.Title,
             FontSize = 10.5,
-            Foreground = TitleBrush,
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 3),
         };
+        title.Themed(TextBlock.ForegroundProperty, "Cad.Subtle");
         Grid.SetRow(title, 1);
         grid.Children.Add(title);
 
         return new Border
         {
-            BorderBrush = SeparatorBrush,
             BorderThickness = new Thickness(0, 0, 1, 0),
             Padding = new Thickness(2, 0),
             Child = grid,
-        };
+        }.Themed(Border.BorderBrushProperty, "Cad.Border");
     }
 
     private Button LargeButton(RibbonButton button)
@@ -165,7 +160,7 @@ public sealed class Ribbon : TabControl
                 new("CERCHIO", "Cerchio", "Cerchio da centro e raggio", Large: true),
                 new("ARCO", "Arco", "Arco per tre punti"),
                 new("RETTANGOLO", "Rettangolo", "Rettangolo da due angoli"),
-                new("TRATTEGGIO", "Tratteggio", "Tratteggio di un'area chiusa"),
+                new("DLGTRATTEGGIO", "Tratteggio", "Tratteggio di un'area chiusa: motivo, scala, angolo", Icon: "TRATTEGGIO"),
             ]),
             new("Modifica",
             [
@@ -192,7 +187,7 @@ public sealed class Ribbon : TabControl
             ]),
             new("Layer e proprietà",
             [
-                new("LAYER", "Layer", "Gestione dei layer dalla riga di comando", Large: true),
+                new("GESTORELAYER", "Layer", "Gestore layer: stato, colore, tipo e spessore di linea", Large: true, Icon: "LAYER"),
                 new("PROPRIETA", "Proprietà", "Mostra la palette Proprietà", Large: true),
             ], properties),
         ]),
@@ -218,13 +213,13 @@ public sealed class Ribbon : TabControl
                 new("QLINEARE", "Lineare", "Quota orizzontale o verticale", Large: true),
                 new("QALLINEATA", "Allineata", "Quota parallela ai due punti"),
                 new("QANGOLARE", "Angolare", "Angolo tra due linee o di un arco"),
-                new("STILEQUOTA", "Stile", "Testo, frecce, decimali"),
+                new("DLGSTILEQUOTA", "Stile", "Stile di quota: testo, frecce, decimali", Icon: "STILEQUOTA"),
                 new("QRAGGIO", "Raggio", "Raggio di un arco o cerchio"),
                 new("QDIAMETRO", "Diametro", "Diametro di un cerchio"),
             ]),
             new("Tratteggio",
             [
-                new("TRATTEGGIO", "Tratteggio", "Tratteggio di un'area chiusa", Large: true),
+                new("DLGTRATTEGGIO", "Tratteggio", "Tratteggio di un'area chiusa: motivo, scala, angolo", Large: true, Icon: "TRATTEGGIO"),
             ]),
         ]),
         new("Vista",
@@ -244,15 +239,30 @@ public sealed class Ribbon : TabControl
                 new("PROPRIETA", "Proprietà", "Mostra la palette Proprietà", Large: true),
                 new("PALETTELAYER", "Layer", "Mostra la palette Layer", Large: true, Icon: "LAYER"),
             ]),
+            new("Aspetto",
+            [
+                new("TEMA", "Tema", "Passa dal tema scuro a quello chiaro e viceversa", Large: true),
+            ]),
         ]),
         new("Gestisci",
         [
+            new("Misura",
+            [
+                new("DISTANZA", "Distanza", "Distanza e angolo tra due punti", Large: true),
+                new("AREA", "Area", "Area e perimetro per punti o di un oggetto", Large: true),
+                new("ID", "Coordinate", "Coordinate di un punto", Large: true, Icon: "ID"),
+            ]),
             new("Layer",
             [
-                new("LAYER", "Layer", "Gestione dei layer dalla riga di comando", Large: true),
+                new("GESTORELAYER", "Gestore", "Gestore layer: stato, colore, tipo e spessore di linea", Large: true, Icon: "LAYER"),
+                new("LAYER", "Da comando", "Gestione dei layer dalla riga di comando"),
                 new("COLORE", "Colore", "Colore della selezione o dei nuovi oggetti"),
                 new("TIPOLINEA", "Tipo linea", "Tipo di linea della selezione o dei nuovi oggetti"),
                 new("SCALATL", "Scala TL", "Scala globale dei tipi di linea"),
+            ]),
+            new("Programma",
+            [
+                new("OPZIONI", "Opzioni", "Griglia, tracciamento, snap, tema", Large: true),
             ]),
         ]),
     ];

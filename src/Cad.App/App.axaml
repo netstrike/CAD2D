@@ -2,6 +2,57 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Cad.App.App"
              RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <ResourceDictionary>
+      <!-- Colori dell'interfaccia per tema: scuro (predefinito, come DraftSight) e chiaro. -->
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Cad.Chrome" Color="#1C1C1C" />
+          <SolidColorBrush x:Key="Cad.Ribbon" Color="#232323" />
+          <SolidColorBrush x:Key="Cad.CommandLine" Color="#262626" />
+          <SolidColorBrush x:Key="Cad.Panel" Color="#2B2B2B" />
+          <SolidColorBrush x:Key="Cad.Category" Color="#363636" />
+          <SolidColorBrush x:Key="Cad.Border" Color="#3C3C3C" />
+          <SolidColorBrush x:Key="Cad.BorderStrong" Color="#4F4F4F" />
+          <SolidColorBrush x:Key="Cad.Field" Color="#1E1E1E" />
+          <SolidColorBrush x:Key="Cad.FieldBorder" Color="#5A5A5A" />
+          <SolidColorBrush x:Key="Cad.FieldLocked" Color="#2E4A2E" />
+          <SolidColorBrush x:Key="Cad.Subtle" Color="#808080" />
+          <SolidColorBrush x:Key="Cad.Text2" Color="#A0A0A0" />
+          <SolidColorBrush x:Key="Cad.Label" Color="#B4B4B4" />
+          <SolidColorBrush x:Key="Cad.Text1" Color="#D0D0D0" />
+          <SolidColorBrush x:Key="Cad.Tooltip" Color="#E6303030" />
+          <SolidColorBrush x:Key="Cad.StatusOn" Color="#1E5A8A" />
+          <SolidColorBrush x:Key="Cad.StatusOnText" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Cad.Selected" Color="#1E4A70" />
+          <SolidColorBrush x:Key="Cad.IconBase" Color="#C8C8C8" />
+          <SolidColorBrush x:Key="Cad.Button" Color="#333333" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Cad.Chrome" Color="#E6E6E6" />
+          <SolidColorBrush x:Key="Cad.Ribbon" Color="#EDEDED" />
+          <SolidColorBrush x:Key="Cad.CommandLine" Color="#F5F5F5" />
+          <SolidColorBrush x:Key="Cad.Panel" Color="#FAFAFA" />
+          <SolidColorBrush x:Key="Cad.Category" Color="#E2E2E2" />
+          <SolidColorBrush x:Key="Cad.Border" Color="#C8C8C8" />
+          <SolidColorBrush x:Key="Cad.BorderStrong" Color="#A8A8A8" />
+          <SolidColorBrush x:Key="Cad.Field" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Cad.FieldBorder" Color="#A8A8A8" />
+          <SolidColorBrush x:Key="Cad.FieldLocked" Color="#D6F0D6" />
+          <SolidColorBrush x:Key="Cad.Subtle" Color="#707070" />
+          <SolidColorBrush x:Key="Cad.Text2" Color="#505050" />
+          <SolidColorBrush x:Key="Cad.Label" Color="#404040" />
+          <SolidColorBrush x:Key="Cad.Text1" Color="#202020" />
+          <SolidColorBrush x:Key="Cad.Tooltip" Color="#F2FFFFFF" />
+          <SolidColorBrush x:Key="Cad.StatusOn" Color="#BCD9F5" />
+          <SolidColorBrush x:Key="Cad.StatusOnText" Color="#0B3A66" />
+          <SolidColorBrush x:Key="Cad.Selected" Color="#CDE3F7" />
+          <SolidColorBrush x:Key="Cad.IconBase" Color="#4A4A4A" />
+          <SolidColorBrush x:Key="Cad.Button" Color="#E4E4E4" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>

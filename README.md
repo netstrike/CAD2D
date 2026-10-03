@@ -30,6 +30,10 @@ dotnet run --project tools/Cad.DxfCheck -- C:\disegni   # prova tutti i DXF di u
 
 ## Stato
 
+Fase 3.5 (interfaccia): barra multifunzione, palette Proprietà e Layer, inserimento rapido vicino al cursore,
+tracciamento polare ed ETrack, gestore layer con spessori di linea, finestre per tratteggio, stile di quota e opzioni,
+tema chiaro. Ogni comando si raggiunge da barra o menu, senza scriverne il nome.
+
 Fase 3 (disegno tecnico): si fa una tavola completa, con quote, tratteggi, blocchi e tipi di linea.
 `samples/tavola.dxf` è stata disegnata solo con i comandi di CAD2D (vedi `tests/Cad.IO.Tests/SampleDrawing.cs`).
 
@@ -82,9 +86,22 @@ Fase 3 (disegno tecnico): si fa una tavola completa, con quote, tratteggi, blocc
 | TIPOLINEA | LT | CONTINUOUS, DASHED, HIDDEN, CENTER, DASHDOT, PHANTOM, DOT |
 | SCALATL | LTS | scala globale dei tipi di linea |
 
-La barra in alto cambia layer, colore e tipo di linea degli oggetti selezionati, oppure quelli dei nuovi oggetti se
-non c'è selezione. Nel pannello layer: caselle per acceso, congelato e bloccato; clic sul colore o sul tipo di linea
-per cambiarli; doppio clic sul nome per renderlo corrente; pulsanti per crearne, rinominarne ed eliminarne.
+Le caselle in Home > Layer e proprietà cambiano layer, colore e tipo di linea degli oggetti selezionati, oppure quelli
+dei nuovi oggetti se non c'è selezione. La palette Proprietà (a destra) mostra e modifica tutti i dati degli oggetti
+selezionati: geometria, testo, quota, spessore di linea; i valori diversi tra più oggetti appaiono come *Vari*.
+Il gestore layer (Home > Layer) è una tabella con stato, colore, tipo e spessore di linea di ogni layer; la palette
+Layer ne è la versione compatta. LWT nella barra di stato mostra gli spessori.
+
+### Misure e appunti
+
+| Comando | Alias | |
+| --- | --- | --- |
+| DISTANZA | DI | distanza, angolo, delta X e Y tra due punti |
+| AREA | AA | area e perimetro per punti, oppure di un oggetto chiuso (opzione Oggetto) |
+| ID | | coordinate di un punto |
+| COPIACLIP, TAGLIACLIP, INCOLLACLIP | Ctrl+C, Ctrl+X, Ctrl+V | anche da un disegno all'altro (layer e blocchi mancanti vengono creati) |
+| COPIABASE | Ctrl+Maiusc+C | copia con punto base |
+| GRIGLIA, POLARE | | passo della griglia, incremento del tracciamento polare |
 
 ### File e vista
 
@@ -95,11 +112,17 @@ per cambiarli; doppio clic sul nome per renderlo corrente; pulsanti per crearne,
 
 Punti: clic, oppure `x,y`, `@dx,dy` (relativo), `d<angolo` e `@d<angolo` (polare, gradi), oppure solo un numero per
 una distanza nella direzione del cursore. Invio, Spazio o tasto destro confermano; Invio a vuoto ripete l'ultimo comando;
-Esc annulla. F3 accende e spegne gli snap, F8 l'ortho; dal menu Snap si scelgono i tipi (estremo, medio, centro,
-quadrante, intersezione, perpendicolare, tangente, nodo, vicino).
+Esc annulla. Tasto destro breve = Invio, tenuto premuto = menu contestuale.
+
+Aiuti al disegno, nella barra di stato: F3 snap agli oggetti (tasto destro: tipi), F7 griglia, F8 ortho, F9 aggancio
+alla griglia, F10 tracciamento polare (tasto destro: incremento), F11 ETrack (fermati un attimo su uno snap per
+acquisirne il punto, poi segui le guide orizzontali e verticali), F12 inserimento rapido. Con l'inserimento rapido
+si scrive la distanza, Tab la blocca, poi si scrive l'angolo. Sulla riga di comando: completamento dei nomi mentre si
+scrive, frecce su e giù per lo storico, opzioni del comando cliccabili.
 
 Selezione: clic su un'entità, oppure finestra con due clic (da sinistra a destra solo le entità interne,
-da destra a sinistra anche quelle intersecate); Maiusc+clic toglie. Sulle entità selezionate compaiono i grip:
+da destra a sinistra anche quelle intersecate); Maiusc+clic toglie; un secondo clic nello stesso punto passa
+all'oggetto sovrapposto successivo; Ctrl+A seleziona tutto. Sulle entità selezionate compaiono i grip:
 un clic su un grip lo sposta (anche i punti delle quote).
 
 Vista: rotella per lo zoom attorno al cursore, tasto centrale trascinato per il pan, doppio clic centrale per lo zoom estensioni.

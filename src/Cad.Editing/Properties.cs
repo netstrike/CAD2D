@@ -175,7 +175,14 @@ public static class PropertySheet
             d => [.. d.Linetypes.Select(l => l.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).Prepend("DaBlocco").Prepend("DaLayer")]);
         yield return new(General, "Scala tipo di linea", PropertyKind.Number, e => Format(e.LinetypeScale),
             Number<Entity>((e, v) => Restyled(e, c => c.LinetypeScale = v), v => v > 0));
+        yield return new(General, "Spessore linea", PropertyKind.Choice, e => LineWeight.Format(e.LineWeight),
+            (e, v) => LineWeight.TryParse(v, out var weight) ? Restyled(e, c => c.LineWeight = weight) : null,
+            _ => LineWeightNames);
     }
+
+    /// <summary>DaLayer, DaBlocco, Predefinito e gli spessori del formato.</summary>
+    public static IReadOnlyList<string> LineWeightNames { get; } =
+        [.. new[] { LineWeight.ByLayer, LineWeight.ByBlock, LineWeight.Default }.Concat(LineWeight.Standard).Select(LineWeight.Format)];
 
     private static (Linetype? Linetype, bool Ok)? ParseLinetype(CadDocument document, string name)
     {

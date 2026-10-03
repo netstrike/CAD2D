@@ -212,6 +212,35 @@ public sealed class DxfDraftingRoundTripTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     [Fact]
+    public void Lineweights_of_layers_and_entities_survive_save_and_reload()
+    {
+        var document = new CadDocument();
+        var outline = document.GetOrAddLayer("CONTORNO");
+        outline.LineWeight = 50;
+        document.Edit("test", e =>
+        {
+            e.Add(new LineEntity(outline, Vector2.Zero, new Vector2(10, 0)));
+            e.Add(new LineEntity(outline, Vector2.Zero, new Vector2(0, 10)) { LineWeight = 18 });
+        });
+
+        var path = Path.Combine(_folder, "spessori.dxf");
+        DxfExporter.Save(document, path);
+        var doc = DxfImporter.Load(path).Document;
+
+        Assert.Equal(50, doc.FindLayer("CONTORNO")!.LineWeight);
+        Assert.Equal(LineWeight.Default, doc.FindLayer("0")!.LineWeight);
+        Assert.Equal([LineWeight.ByLayer, 18], doc.ModelSpace.Select(e => e.LineWeight).Order());
+
+        // Cambio dello spessore di un'entità letta dal file: va scritto anche sulla copia dell'originale.
+        var line = doc.ModelSpace.First(e => e.LineWeight == 18);
+        var copy = line.Transformed(Matrix2D.Identity);
+        copy.LineWeight = 35;
+        doc.Edit("test", e => e.Replace(line, copy));
+        DxfExporter.Save(doc, path);
+        Assert.Contains(DxfImporter.Load(path).Document.ModelSpace, e => e.LineWeight == 35);
+    }
+
+    [Fact]
     public void Linetypes_hatches_and_solids_survive_save_and_reload()
     {
         var document = new CadDocument { LinetypeScale = 0.5 };

@@ -15,6 +15,9 @@ public abstract class Entity
     /// <summary>Fattore che moltiplica la scala globale dei tipi di linea.</summary>
     public double LinetypeScale { get; set; } = 1;
 
+    /// <summary>Spessore di linea: centesimi di millimetro oppure DaLayer (il default), DaBlocco, Predefinito.</summary>
+    public int LineWeight { get; set; } = Document.LineWeight.ByLayer;
+
     /// <summary>Copia layer, colore e tipo di linea da un'altra entità.</summary>
     public T CopyStyleFrom<T>(Entity other) where T : Entity
     {
@@ -22,6 +25,7 @@ public abstract class Entity
         Color = other.Color;
         Linetype = other.Linetype;
         LinetypeScale = other.LinetypeScale;
+        LineWeight = other.LineWeight;
         return (T)this;
     }
 

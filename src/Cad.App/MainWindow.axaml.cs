@@ -125,8 +125,27 @@ public partial class MainWindow : Window
             case "PALETTELAYER":
                 ShowPalette(1);
                 break;
+            case "GESTORELAYER":
+                if (_editor is { } editor)
+                {
+                    _ = LayerManagerDialog.ShowAsync(this, editor, () =>
+                    {
+                        editor.Locator.Invalidate();
+                        OnLayerStateChanged();
+                        RefreshLayers();
+                        Canvas.RefreshScene();
+                    }, AppendHistory);
+                }
+
+                break;
             case "SELEZIONATUTTO":
                 _editor?.SelectAll();
+                break;
+            case "DLGTRATTEGGIO" or "DLGSTILEQUOTA" or "OPZIONI":
+                ShowDialogCommand(command);
+                return;
+            case "TEMA":
+                SetTheme(!AppTheme.IsLight);
                 break;
             default:
                 _editor?.RunCommand(command);
@@ -204,6 +223,94 @@ public partial class MainWindow : Window
 
         var menu = new ContextMenu { ItemsSource = items, Placement = PlacementMode.AnchorAndGravity, PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft, PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight, PlacementRect = new Rect(at, new Size(1, 1)) };
         menu.Open(Canvas);
+    }
+
+    /// <summary>Finestre di dialogo: tratteggio, stile di quota e opzioni.</summary>
+    private async void ShowDialogCommand(string command)
+    {
+        if (_editor is not { } editor)
+        {
+            return;
+        }
+
+        switch (command)
+        {
+            case "DLGTRATTEGGIO":
+            {
+                var dialog = new HatchDialog(editor.Settings);
+                await dialog.ShowDialog(this);
+                if (dialog.Accepted)
+                {
+                    editor.RunCommand("TRATTEGGIO");
+                    if (dialog.SelectObjects)
+                    {
+                        editor.SubmitText("Seleziona");
+                    }
+                }
+
+                break;
+            }
+
+            case "DLGSTILEQUOTA":
+            {
+                var dialog = new DimensionStyleDialog(editor.Document);
+                await dialog.ShowDialog(this);
+                if (dialog.Accepted)
+                {
+                    // Le quote già disegnate si aggiornano con lo stile.
+                    editor.Document.MarkModified();
+                    AppendHistory($"Stile di quota {editor.Document.CurrentDimensionStyle.Name} aggiornato.");
+                }
+
+                break;
+            }
+
+            case "OPZIONI":
+            {
+                var dialog = new OptionsDialog(editor, () => _snapModes, SetSnapModes, AppTheme.IsLight, SetTheme);
+                await dialog.ShowDialog(this);
+                if (dialog.Accepted)
+                {
+                    _polarIncrement = editor.PolarIncrementDegrees;
+                    Canvas.InvalidateOverlay();
+                }
+
+                break;
+            }
+        }
+
+        CommandBox.Focus();
+    }
+
+    private void SetSnapModes(SnapModes modes)
+    {
+        _snapModes = modes;
+        if (SnapMenu.ItemsSource is IEnumerable<MenuItem> items)
+        {
+            foreach (var (item, (mode, _)) in items.Zip(SnapItems))
+            {
+                item.IsChecked = modes.HasFlag(mode);
+            }
+        }
+
+        if (_editor is not null)
+        {
+            _editor.SnapModes = modes;
+        }
+    }
+
+    /// <summary>Tema chiaro o scuro: interfaccia e sfondo del disegno insieme.</summary>
+    private void SetTheme(bool light)
+    {
+        AppTheme.Apply(light);
+        Canvas.LightBackground = light;
+        Canvas.RefreshScene();
+        foreach (var palette in new Control[] { RibbonBar, PropertiesPanel })
+        {
+            palette.InvalidateVisual();
+        }
+
+        PropertiesPanel.Refresh();
     }
 
     private void ShowPalette(int tab)
@@ -647,7 +754,7 @@ public partial class MainWindow : Window
 
     private void OnMenuCommand(object? sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem { Tag: string command })
+        if (sender is Control { Tag: string command })
         {
             RunUiCommand(command);
         }
@@ -655,5 +762,4 @@ public partial class MainWindow : Window
 
     private void OnExitClick(object? sender, RoutedEventArgs e) => Close();
 
-    private void OnZoomExtentsClick(object? sender, RoutedEventArgs e) => Canvas.ZoomExtents();
 }

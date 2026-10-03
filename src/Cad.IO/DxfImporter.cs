@@ -131,6 +131,7 @@ public static class DxfImporter
                 target.IsOn = layer.IsOn;
                 target.IsFrozen = layer.Flags.HasFlag(Acad.Tables.LayerFlags.Frozen);
                 target.IsLocked = layer.Flags.HasFlag(Acad.Tables.LayerFlags.Locked);
+                target.LineWeight = (int)layer.LineWeight is >= 0 and var w ? w : LineWeight.Default;
                 target.FileName = layer.Name;
             }
         }
@@ -152,6 +153,7 @@ public static class DxfImporter
             converted.Color = ToEntityColor(source.Color);
             converted.Linetype = ToLinetype(source.LineType);
             converted.LinetypeScale = source.LineTypeScale > 0 ? source.LineTypeScale : 1;
+            converted.LineWeight = (int)source.LineWeight;
             target.Add(converted);
             return converted;
         }

@@ -141,7 +141,7 @@ public partial class MainWindow
         }
 
         var document = _editor.Document;
-        var signature = string.Join("|", document.Layers.Select(l => $"{l.Name}/{l.Color}/{l.Linetype.Name}/{l.IsOn}/{l.IsFrozen}/{l.IsLocked}")) +
+        var signature = string.Join("|", document.Layers.Select(l => $"{l.Name}/{l.Color}/{l.Linetype.Name}/{l.LineWeight}/{l.IsOn}/{l.IsFrozen}/{l.IsLocked}")) +
                         "#" + _editor.CurrentLayer.Name;
         if (force || signature != _layerSignature)
         {

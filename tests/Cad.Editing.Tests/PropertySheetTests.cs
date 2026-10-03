@@ -153,4 +153,14 @@ public class PropertySheetTests
         Assert.True(Set([dimension], "Testo", "<> H7"));
         Assert.Equal("40 H7", _document.ModelSpace.OfType<DimensionEntity>().Single().Text);
     }
+
+    [Fact]
+    public void Lineweight_is_a_general_property()
+    {
+        var line = Add(new LineEntity(_layer, Vector2.Zero, new Vector2(1, 0)));
+        Assert.Equal("DaLayer", Row([line], "Spessore linea").Value);
+        Assert.True(Set([line], "Spessore linea", "0.50 mm"));
+        Assert.Equal(50, Assert.Single(_document.ModelSpace).LineWeight);
+        Assert.False(Set([_document.ModelSpace[0]], "Spessore linea", "0.33"));
+    }
 }

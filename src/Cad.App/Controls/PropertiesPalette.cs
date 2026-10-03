@@ -15,9 +15,6 @@ namespace Cad.App.Controls;
 /// </summary>
 public sealed class PropertiesPalette : UserControl
 {
-    private static readonly IBrush CategoryBrush = new SolidColorBrush(Color.FromRgb(0x36, 0x36, 0x36));
-    private static readonly IBrush LabelBrush = new SolidColorBrush(Color.FromRgb(0xB4, 0xB4, 0xB4));
-    private static readonly IBrush ReadOnlyBrush = new SolidColorBrush(Color.FromRgb(0x96, 0x96, 0x96));
 
     private readonly TextBlock _header = new() { FontWeight = FontWeight.SemiBold, Margin = new Thickness(10, 8, 10, 6) };
     private readonly StackPanel _rows = new();
@@ -29,11 +26,10 @@ public sealed class PropertiesPalette : UserControl
         var hint = new TextBlock
         {
             Text = "Seleziona oggetti nel disegno per vederne e cambiarne le proprietà.",
-            Foreground = ReadOnlyBrush,
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(10, 0, 10, 8),
-        };
+        }.Themed(TextBlock.ForegroundProperty, "Cad.Subtle");
         var panel = new DockPanel();
         DockPanel.SetDock(_header, Dock.Top);
         panel.Children.Add(_header);
@@ -103,10 +99,9 @@ public sealed class PropertiesPalette : UserControl
         {
             _rows.Children.Add(new Border
             {
-                Background = CategoryBrush,
                 Padding = new Thickness(10, 3),
                 Child = new TextBlock { Text = group.Key, FontWeight = FontWeight.SemiBold, FontSize = 11.5 },
-            });
+            }.Themed(Border.BackgroundProperty, "Cad.Category"));
             foreach (var row in group)
             {
                 _rows.Children.Add(BuildRow(row, entities));
@@ -117,7 +112,8 @@ public sealed class PropertiesPalette : UserControl
     private Control BuildRow(PropertyRow row, IReadOnlyList<Entity> entities)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*"), Margin = new Thickness(10, 1, 6, 1), MinHeight = 26 };
-        grid.Children.Add(new TextBlock { Text = row.Name, Foreground = LabelBrush, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+        grid.Children.Add(new TextBlock { Text = row.Name, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }
+            .Themed(TextBlock.ForegroundProperty, "Cad.Label"));
         var editor = BuildEditor(row, entities);
         Grid.SetColumn(editor, 1);
         grid.Children.Add(editor);
@@ -132,11 +128,10 @@ public sealed class PropertiesPalette : UserControl
                 return new SelectableTextBlock
                 {
                     Text = row.Value ?? PropertySheet.Mixed,
-                    Foreground = ReadOnlyBrush,
                     FontSize = 11.5,
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(4, 0),
-                };
+                }.Themed(TextBlock.ForegroundProperty, "Cad.Subtle");
 
             case PropertyKind.Choice:
             {

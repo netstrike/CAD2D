@@ -10,7 +10,7 @@ namespace Cad.App.Controls;
 /// </summary>
 internal sealed class SceneGeometry : IDisposable
 {
-    private SceneGeometry(Scene scene, Vector2 origin, IReadOnlyList<(SKColor Color, SKPath Path)> paths, IReadOnlyList<(SKColor Color, SKPath Path)> fills)
+    private SceneGeometry(Scene scene, Vector2 origin, IReadOnlyList<(SKColor Color, SKPath Path, double Weight)> paths, IReadOnlyList<(SKColor Color, SKPath Path)> fills)
     {
         Scene = scene;
         Origin = origin;
@@ -25,12 +25,13 @@ internal sealed class SceneGeometry : IDisposable
 
     public Scene Scene { get; }
     public Vector2 Origin { get; }
-    public IReadOnlyList<(SKColor Color, SKPath Path)> Paths { get; }
+    /// <summary>Spezzate per colore e spessore di linea (in millimetri).</summary>
+    public IReadOnlyList<(SKColor Color, SKPath Path, double Weight)> Paths { get; }
 
-    public static SceneGeometry Build(Scene scene)
+    public static SceneGeometry Build(Scene scene, bool light = false)
     {
         var origin = scene.Bounds.IsEmpty ? Vector2.Zero : scene.Bounds.Center;
-        var paths = new List<(SKColor, SKPath)>(scene.Batches.Count);
+        var paths = new List<(SKColor, SKPath, double)>(scene.Batches.Count);
         foreach (var batch in scene.Batches)
         {
             var path = new SKPath();
@@ -45,7 +46,7 @@ internal sealed class SceneGeometry : IDisposable
                 }
             }
 
-            paths.Add((ToSkColor(batch.Color), path));
+            paths.Add((ToSkColor(batch.Color, light), path, batch.Weight));
         }
 
         var fills = new List<(SKColor, SKPath)>(scene.Fills.Count);
@@ -65,19 +66,28 @@ internal sealed class SceneGeometry : IDisposable
                 path.Close();
             }
 
-            fills.Add((ToSkColor(batch.Color), path));
+            fills.Add((ToSkColor(batch.Color, light), path));
         }
 
-        return new SceneGeometry(scene, origin, paths, fills);
+        return new SceneGeometry(scene, origin, paths, fills) { Light = light };
     }
 
-    /// <summary>Il nero puro è invisibile su fondo scuro: come negli altri CAD, si disegna bianco.</summary>
-    public static SKColor ToSkColor(Cad.Document.CadColor color) =>
-        color is { R: 0, G: 0, B: 0 } ? SKColors.White : new SKColor(color.R, color.G, color.B);
+    /// <summary>Colori pensati per lo sfondo chiaro (bianco diventa nero).</summary>
+    public bool Light { get; private init; }
+
+    /// <summary>
+    /// Il nero puro è invisibile su fondo scuro e il bianco su fondo chiaro: come negli altri CAD (colore 7) si scambiano.
+    /// </summary>
+    public static SKColor ToSkColor(Cad.Document.CadColor color, bool light = false) => color switch
+    {
+        { R: 0, G: 0, B: 0 } when !light => SKColors.White,
+        { R: 255, G: 255, B: 255 } when light => SKColors.Black,
+        _ => new SKColor(color.R, color.G, color.B),
+    };
 
     public void Dispose()
     {
-        foreach (var (_, path) in Paths.Concat(Fills))
+        foreach (var path in Paths.Select(p => p.Path).Concat(Fills.Select(f => f.Path)))
         {
             path.Dispose();
         }

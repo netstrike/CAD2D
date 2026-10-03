@@ -41,6 +41,9 @@ public sealed class Editor
     /// <summary>Tipo di linea delle entità nuove; null = DaLayer.</summary>
     public Linetype? CurrentLinetype { get; set; }
 
+    /// <summary>Spessore dei nuovi oggetti (DaLayer di default).</summary>
+    public int CurrentLineWeight { get; set; } = LineWeight.ByLayer;
+
     /// <summary>
     /// Cambia proprietà (layer, colore, tipo di linea) delle entità date in un'unica operazione annullabile.
     /// Le entità modificate restano selezionate.
@@ -69,6 +72,7 @@ public sealed class Editor
         entity.Layer = CurrentLayer;
         entity.Color = CurrentColor;
         entity.Linetype = CurrentLinetype;
+        entity.LineWeight = CurrentLineWeight;
         return entity;
     }
 

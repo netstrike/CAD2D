@@ -26,6 +26,7 @@ internal static class BuiltInCommands
         LayerCommands.Register(editor);
         ClipboardCommands.Register(editor);
         AidCommands.Register(editor);
+        MeasureCommands.Register(editor);
     }
 
     private static async Task Line(Editor ed)

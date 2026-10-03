@@ -81,6 +81,11 @@ public static class DxfExporter
                 {
                     written.LineTypeScale = entity.LinetypeScale;
                 }
+
+                if ((int)written.LineWeight != entity.LineWeight)
+                {
+                    written.LineWeight = (Acad.LineWeightType)(short)entity.LineWeight;
+                }
             }
             else
             {
@@ -128,6 +133,11 @@ public static class DxfExporter
             if (!string.Equals(acadLayer.LineType?.Name, linetype.Name, StringComparison.OrdinalIgnoreCase))
             {
                 acadLayer.LineType = linetype;
+            }
+
+            if ((int)acadLayer.LineWeight != layer.LineWeight)
+            {
+                acadLayer.LineWeight = (Acad.LineWeightType)(short)layer.LineWeight;
             }
 
             acadLayer.IsOn = layer.IsOn;
@@ -407,6 +417,7 @@ public static class DxfExporter
                 result.Color = ToAcadColor(entity.Color);
                 result.LineType = GetLinetype(target, entity.Linetype);
                 result.LineTypeScale = entity.LinetypeScale;
+                result.LineWeight = (Acad.LineWeightType)(short)entity.LineWeight;
             }
 
             return result;
